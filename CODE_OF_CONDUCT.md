@@ -2,7 +2,7 @@
 title: Code of Conduct
 description: A Code of Conduct for this github project.
 ---
-## Sample Code of Conduct
+# Code of Conduct
 ---
 ## Contributor Covenant Code of Conduct
 
