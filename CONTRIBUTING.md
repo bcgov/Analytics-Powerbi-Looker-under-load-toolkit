@@ -1,8 +1,4 @@
----
-title: Contributing
-description: A guide to contributing to this github project.
----
-## Contributing
+# Contributing
 ---
 ## How to contribute
 Government employees, public and members of the private sector are encouraged to contribute to the repository by **forking and submitting a pull request**. 
