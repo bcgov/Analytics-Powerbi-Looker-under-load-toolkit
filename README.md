@@ -1,7 +1,8 @@
 # Analytics Looker/Redshift Load Analysis SQL Toolkit
 
 ---
-Analytics clients would like reports and dashboards in Power BI. Linking Power BI to the AWS Redshift main database and building reprentative dashboards and reports is a large undertaking. For planning purposes, this repository of SQL files will be used to characterize Analytics' Looker-based pipeline when under load. The results of the analysis will be used to plan the Power BI build.
+
+This SQL file repository will be used to query log data to analyze Analytics' Looker and AWS Redshift-based analytics pipeline during peak times. The benchmark results will guide Power BI on-prem gateway sizing and dashboard development planning.
 
 ## Requirements
 The SQL scripts are written and tested for use in Looker SQL Runner.
