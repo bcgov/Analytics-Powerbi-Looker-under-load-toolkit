@@ -10,6 +10,64 @@
    - One peak hour per day (hour with max dashboard runtime)
    ============================================================================= */
 
+/* READ-ONLY QUERY
+   This SQL is strictly read-only. It only SELECTs and aggregates existing data
+   and does NOT insert, update, delete, or modify any database objects. */
+
+/* ---------------------------------------------------------------------------
+   INPUT
+   Run this query in SQL Runner
+   Connection: looker_mysql_direct
+   Schema: looker
+   Table: history
+
+   The history table records every query executed by Looker, including timing,
+   runtime, dashboard attribution, user, session, and cache information.
+   --------------------------------------------------------------------------- */
+
+/* ---------------------------------------------------------------------------
+   OUTPUTS
+   The result set contains a single, self-describing report organized into
+   labeled sections via the `result_section` column. Each row represents a
+   specific metric, distribution element, or explanatory note.
+
+   Columns:
+   - result_section : Logical grouping or metric identifier
+   - key_value      : Dimension, label, or identifier (for example hour or dashboard_id)
+   - metric_value   : Numeric value or descriptive text associated with the row
+
+   Sections included:
+
+   1. REPORT_METADATA
+      - Analysis date range
+      - Number of daily peak hours analyzed (one per day)
+      - Count of distinct dashboards participating in peak hours
+      - Explanatory notes for interpreting later sections
+
+   2. A_PEAK_HOUR_DISTRIBUTION
+      - Distribution of peak hour-of-day (Pacific Time)
+      - Shows how often each hour is identified as the daily peak
+
+   3. B_PEAK_RUNTIME_* (Peak Hour Runtime Magnitude)
+      - P50, P75, P90, and MAX of total dashboard runtime (seconds)
+        during each day’s peak hour
+      - Represents intensity of interactive load during peak periods
+
+   4. C_DASHBOARD_*_RECURRENCE (Peak Driver Identification)
+      - Dashboards grouped by frequency of appearance in daily peak hours:
+          * CORE (>= 75% of days)
+          * STRUCTURAL (>= 50% of days)
+          * FREQUENT (>= 25% of days)
+      - Identifies which dashboards consistently drive peak load
+
+   Interpretation Notes:
+   - Each day contributes exactly one peak hour
+   - Runtime is the sum of query runtimes for dashboard-generated queries only
+   - Results are designed to support downstream workload modeling,
+     including concurrency estimation and representative dashboard selection
+   --------------------------------------------------------------------------- */
+
+
 WITH date_range AS (
   SELECT
     '2026-01-05' AS analysis_range_first_day,
