@@ -476,6 +476,96 @@ d3_base_metrics AS (
   GROUP BY
     cpm.time_scope,
     cpm.query_category
+),
+
+/* ***************************************************************************
+   DIMENSION 4 — FAN-OUT CTEs
+   Source: A_1_query5_fan-out.sql
+   *************************************************************************** */
+
+d4_peak_hours AS (
+  SELECT
+    hourly.completed_date_pacific,
+    MIN(hourly.completed_hour_pacific) AS completed_hour_pacific
+  FROM (
+    SELECT
+      DATE(CONVERT_TZ(h.completed_at,'UTC','America/Vancouver'))
+        AS completed_date_pacific,
+      HOUR(CONVERT_TZ(h.completed_at,'UTC','America/Vancouver'))
+        AS completed_hour_pacific,
+      SUM(h.runtime) AS hourly_dashboard_runtime
+    FROM history h
+    JOIN date_range dr ON 1=1
+    WHERE CONVERT_TZ(h.completed_at,'UTC','America/Vancouver')
+          >= dr.analysis_range_first_day
+      AND CONVERT_TZ(h.completed_at,'UTC','America/Vancouver')
+          <  dr.analysis_range_last_day
+      AND h.dashboard_id IS NOT NULL
+      AND h.runtime IS NOT NULL
+    GROUP BY
+      completed_date_pacific,
+      completed_hour_pacific
+  ) hourly
+  JOIN (
+    SELECT
+      x.completed_date_pacific,
+      MAX(x.hourly_dashboard_runtime) AS max_runtime
+    FROM (
+      SELECT
+        DATE(CONVERT_TZ(h2.completed_at,'UTC','America/Vancouver'))
+          AS completed_date_pacific,
+        HOUR(CONVERT_TZ(h2.completed_at,'UTC','America/Vancouver'))
+          AS completed_hour_pacific,
+        SUM(h2.runtime) AS hourly_dashboard_runtime
+      FROM history h2
+      JOIN date_range dr2 ON 1=1
+      WHERE CONVERT_TZ(h2.completed_at,'UTC','America/Vancouver')
+            >= dr2.analysis_range_first_day
+        AND CONVERT_TZ(h2.completed_at,'UTC','America/Vancouver')
+            <  dr2.analysis_range_last_day
+        AND h2.dashboard_id IS NOT NULL
+        AND h2.runtime IS NOT NULL
+      GROUP BY
+        completed_date_pacific,
+        completed_hour_pacific
+    ) x
+    GROUP BY x.completed_date_pacific
+  ) mx
+    ON hourly.completed_date_pacific  = mx.completed_date_pacific
+   AND hourly.hourly_dashboard_runtime = mx.max_runtime
+  GROUP BY hourly.completed_date_pacific
+),
+
+d4_peak_hour_dashboard_queries AS (
+  SELECT
+    h.dashboard_id,
+    h.dashboard_session,
+    h.runtime
+  FROM history h
+  JOIN d4_peak_hours ph
+    ON DATE(CONVERT_TZ(h.created_at,'UTC','America/Vancouver'))
+       = ph.completed_date_pacific
+   AND HOUR(CONVERT_TZ(h.created_at,'UTC','America/Vancouver'))
+       = ph.completed_hour_pacific
+  JOIN date_range dr ON 1=1
+  WHERE h.dashboard_id IS NOT NULL
+    AND CONVERT_TZ(h.created_at,'UTC','America/Vancouver')
+        >= dr.analysis_range_first_day
+    AND CONVERT_TZ(h.created_at,'UTC','America/Vancouver')
+        <  dr.analysis_range_last_day
+),
+
+d4_fanout_metrics AS (
+  SELECT
+    phdq.dashboard_id,
+    COUNT(DISTINCT phdq.dashboard_session)              AS dashboard_sessions_count,
+    ROUND(
+      COUNT(*) / NULLIF(COUNT(DISTINCT phdq.dashboard_session), 0),
+      2
+    )                                                   AS queries_per_dashboard_session,
+    ROUND(SUM(phdq.runtime), 2)                         AS total_runtime_seconds
+  FROM d4_peak_hour_dashboard_queries phdq
+  GROUP BY phdq.dashboard_id
 )
 
 /* ***************************************************************************
@@ -775,7 +865,7 @@ SELECT
     ORDER BY cpm2.rownum
     LIMIT 1
   )                                                       AS col_5
-FROM d3_base_metrics bm;
+FROM d3_base_metrics bm
 
 
 /* =============================================================================
@@ -789,7 +879,27 @@ FROM d3_base_metrics bm;
    query volume.
    ============================================================================= */
 
--- TODO: SQL placeholder (A_1_query5_fan-out.sql)
+UNION ALL
+
+/* --- DIMENSION 4: COLUMN HEADINGS --- */
+SELECT
+  'D4_COLUMN_HEADINGS'                   AS result_section,
+  'dashboard_id'                          AS key_value,
+  'queries_per_dashboard_session'         AS metric_value,
+  'dashboard_sessions_count'              AS col_4,
+  'total_runtime_seconds'                 AS col_5
+
+UNION ALL
+
+/* --- DIMENSION 4: FAN-OUT DATA (peak hours only, ordered by fan-out desc) --- */
+SELECT
+  'D4_FAN_OUT'                            AS result_section,
+  CAST(fm.dashboard_id AS CHAR)           AS key_value,
+  fm.queries_per_dashboard_session        AS metric_value,
+  fm.dashboard_sessions_count             AS col_4,
+  fm.total_runtime_seconds                AS col_5
+FROM d4_fanout_metrics fm
+ORDER BY fm.queries_per_dashboard_session DESC, fm.total_runtime_seconds DESC;
 
 
 /* =============================================================================
