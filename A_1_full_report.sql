@@ -102,7 +102,14 @@ WITH date_range AS (
 d0_days_data AS (
   SELECT
     COUNT(DISTINCT
+      /* AND h.runtime IS NOT NULL: excludes phantom Saturday sessions where
+         dashboard_id is set but runtime is NULL (likely scheduled content
+         deliveries). Diagnostic confirmed 6 Saturdays each with 1–3 NULL-runtime
+         queries — not interactive usage days. Without this, those days are
+         counted here but silently dropped by daily_peak_hours, causing a
+         discrepancy in REPORT_METADATA. */
       CASE WHEN h.dashboard_id IS NOT NULL
+            AND h.runtime IS NOT NULL
            THEN DATE(CONVERT_TZ(h.completed_at,'UTC','America/Vancouver'))
       END
     ) AS distinct_days_dashboard_queries,
@@ -139,6 +146,12 @@ daily_peak_hours AS (
       AND CONVERT_TZ(h.completed_at,'UTC','America/Vancouver')
           <  dr.analysis_range_last_day
       AND h.dashboard_id IS NOT NULL
+      /* AND h.runtime IS NOT NULL: excludes phantom Saturday sessions where
+         dashboard_id is set but runtime is NULL (likely scheduled content
+         deliveries). Without this filter, SUM(runtime) = NULL for those hours,
+         MAX(hourly_dashboard_runtime) = NULL, and the JOIN condition
+         (NULL = NULL) never matches, silently dropping those days. */
+      AND h.runtime IS NOT NULL
     GROUP BY 1,2
   ) hourly
   JOIN (
@@ -159,6 +172,7 @@ daily_peak_hours AS (
         AND CONVERT_TZ(h2.completed_at,'UTC','America/Vancouver')
             <  dr2.analysis_range_last_day
         AND h2.dashboard_id IS NOT NULL
+        AND h2.runtime IS NOT NULL  -- same NULL-runtime exclusion as outer subquery
       GROUP BY 1,2
     ) x
     GROUP BY completed_date_pacific
@@ -506,3 +520,92 @@ HAVING COUNT(DISTINCT completed_date_pacific)
    ============================================================================= */
 
 -- TODO: SQL placeholder (A_1_query9_redshift_CPU_saturation.sql)
+
+
+/* =============================================================================
+   DIAGNOSTIC — DAYS WITH DASHBOARD QUERIES BUT NO IDENTIFIED PEAK HOUR
+
+   PURPOSE
+   Investigates the discrepancy between 'Days with dashboard queries' and
+   'Total daily peak hours analysed' in REPORT_METADATA.
+
+   Copy and paste this standalone query into SQL Runner separately.
+   Edit the date range below to match the main query's date_range CTE.
+
+   COLUMNS
+   missing_date              : The calendar date (Pacific) that was dropped
+   hours_tied_for_max        : Number of hours that shared the same max runtime
+                               on that day. If > 1, hypothesis (a) — a tie in
+                               hourly runtime prevented the CTE from resolving
+                               a single peak hour cleanly.
+   max_hourly_runtime_secs   : Total dashboard runtime in the busiest hour.
+                               If 0 or very small, hypothesis (c) — zero-runtime
+                               sessions counted by D0 but invisible to peak logic.
+   total_queries_that_day    : Confirms dashboard queries genuinely existed.
+   distinct_hours_with_data  : How many hours had at least one dashboard query.
+   ============================================================================= */
+
+/*
+WITH date_range AS (
+  SELECT
+    '2025-11-01' AS analysis_range_first_day,   -- edit to match main query
+    '2026-04-30' AS analysis_range_last_day      -- edit to match main query
+),
+
+-- Hourly dashboard runtime per day — same aggregation as the main query
+hourly_runtimes AS (
+  SELECT
+    DATE(CONVERT_TZ(h.completed_at,'UTC','America/Vancouver'))
+      AS completed_date_pacific,
+    HOUR(CONVERT_TZ(h.completed_at,'UTC','America/Vancouver'))
+      AS completed_hour_pacific,
+    SUM(h.runtime) AS hourly_runtime,
+    COUNT(*)       AS query_count
+  FROM history h
+  JOIN date_range dr ON 1=1
+  WHERE CONVERT_TZ(h.completed_at,'UTC','America/Vancouver')
+          >= dr.analysis_range_first_day
+    AND CONVERT_TZ(h.completed_at,'UTC','America/Vancouver')
+          <  dr.analysis_range_last_day
+    AND h.dashboard_id IS NOT NULL
+  GROUP BY 1, 2
+),
+
+-- Max hourly runtime per day
+daily_max AS (
+  SELECT
+    completed_date_pacific,
+    MAX(hourly_runtime) AS max_hourly_runtime
+  FROM hourly_runtimes
+  GROUP BY completed_date_pacific
+),
+
+-- Reproduces the daily_peak_hours CTE logic from the main query exactly
+daily_peak_hours AS (
+  SELECT
+    hr.completed_date_pacific,
+    MIN(hr.completed_hour_pacific) AS peak_hour_pacific
+  FROM hourly_runtimes hr
+  JOIN daily_max dm
+    ON hr.completed_date_pacific = dm.completed_date_pacific
+   AND hr.hourly_runtime         = dm.max_hourly_runtime
+  GROUP BY hr.completed_date_pacific
+)
+
+-- Dates present in hourly data but absent from daily_peak_hours
+SELECT
+  hr.completed_date_pacific                                         AS missing_date,
+  SUM(CASE WHEN hr.hourly_runtime = dm.max_hourly_runtime
+           THEN 1 ELSE 0 END)                                       AS hours_tied_for_max,
+  dm.max_hourly_runtime                                             AS max_hourly_runtime_secs,
+  SUM(hr.query_count)                                               AS total_queries_that_day,
+  COUNT(DISTINCT hr.completed_hour_pacific)                         AS distinct_hours_with_data
+FROM hourly_runtimes hr
+JOIN daily_max dm
+  ON hr.completed_date_pacific = dm.completed_date_pacific
+LEFT JOIN daily_peak_hours dph
+  ON hr.completed_date_pacific = dph.completed_date_pacific
+WHERE dph.completed_date_pacific IS NULL   -- missing dates only
+GROUP BY hr.completed_date_pacific, dm.max_hourly_runtime
+ORDER BY hr.completed_date_pacific;
+*/
