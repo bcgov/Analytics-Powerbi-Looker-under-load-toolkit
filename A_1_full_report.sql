@@ -3,8 +3,8 @@
 
    PURPOSE
 
-   - Turns Looker history → quantified system stress profile
-   - And then → concrete DAX simulation plan
+   - Turns Looker history into quantified system stress profile
+   - And then can be used to create a concrete DAX simulation plan
    
    STRUCTURE
 
