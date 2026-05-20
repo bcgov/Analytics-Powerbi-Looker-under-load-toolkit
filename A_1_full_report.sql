@@ -37,31 +37,6 @@
     *************************************************************************** */
 
 /* ==========================================================================
-    DIMENSION 0. Sanity Checks
-
-    In this section/dimension, we have added some basic queries to 
-    sanity*check the data and ensure our assumptions about the dataset hold true. 
-    These queries are not part of the final report output but are crucial
-    for validating the integrity of the data and the correctness of our subsequent 
-    analyses.
-    *************************************************************************** */
-
-/* --------------------------------------------------------------------------
-   D0.1 — DAYS WITH DATA IN RANGE
-
-   Counts how many distinct calendar days (Pacific Time) have any rows in the
-   history table within the analysis range, broken down by:
-     - All queries (data coverage check)
-     - Dashboard-generated queries only (history.dashboard_id IS NOT NULL)
-   The difference reveals days that have Looker activity but no interactive
-   dashboard use (e.g. API queries, scheduled runs, or genuine zero-use days).
-
-   Output rows: D0_SANITY_DAYS_WITH_DATA
-   (Integrated into the main unified query below — no separate run needed.)
-   --------------------------------------------------------------------------- */
-
-
-/* ==========================================================================
     DIMENSION 1. DAILY PEAKS
 
     Summarizes daily peak *interactive dashboard* behavior across an extended
@@ -248,28 +223,6 @@ ranked_peaks AS (
    FINAL SINGLE RESULT SET (REPORT FORMAT)
    *************************************************************************** */
 
-/* --- D0 SANITY: DAYS WITH DATA IN RANGE --- */
-SELECT
-  'D0_SANITY_DAYS_WITH_DATA'        AS result_section,
-  'distinct_days_dashboard_queries'  AS key_value,
-  distinct_days_dashboard_queries    AS metric_value
-FROM d0_days_data
-
-UNION ALL
-SELECT
-  'D0_SANITY_DAYS_WITH_DATA',
-  'distinct_days_any_query',
-  distinct_days_any_query
-FROM d0_days_data
-
-UNION ALL
-SELECT
-  'D0_SANITY_DAYS_WITH_DATA',
-  'days_with_no_dashboard_activity',
-  distinct_days_any_query - distinct_days_dashboard_queries
-FROM d0_days_data
-
-UNION ALL
 /* --- REPORT METADATA --- */
 SELECT
   'REPORT_METADATA' AS result_section,
@@ -283,8 +236,55 @@ SELECT
 UNION ALL
 SELECT
   'REPORT_METADATA',
+  'Number of days in date range',
+  DATEDIFF(
+    (SELECT analysis_range_last_day FROM date_range),
+    (SELECT analysis_range_first_day FROM date_range)
+  )
+
+UNION ALL
+SELECT
+  'REPORT_METADATA',
+  'Days with any queries',
+  distinct_days_any_query
+FROM d0_days_data
+
+UNION ALL
+SELECT
+  'REPORT_METADATA',
+  'Days with dashboard queries',
+  distinct_days_dashboard_queries
+FROM d0_days_data
+
+UNION ALL
+SELECT
+  'REPORT_METADATA',
+  'Days with no dashboard queries',
+  distinct_days_any_query - distinct_days_dashboard_queries
+FROM d0_days_data
+
+UNION ALL
+SELECT
+  'REPORT_METADATA',
   'Total daily peak hours analysed',
   (SELECT COUNT(*) FROM daily_peak_hours)
+
+UNION ALL
+/* If this value is non-zero, some days had dashboard queries but were silently
+   dropped by the daily_peak_hours CTE. Known hypotheses:
+   (a) Tie in hourly runtime across two or more hours on the same day — the
+       MAX(hourly_dashboard_runtime) join matches multiple hours, and the
+       GROUP BY / MIN(hour) may not resolve cleanly in all MySQL versions.
+   (b) Queries completed exactly at the date boundary (midnight Pacific) causing
+       a date mismatch between the outer filter and the inner subquery.
+   (c) A dashboard_id that is NOT NULL but evaluates as a zero-runtime session,
+       meaning it appears in d0_days_data but produces no hourly_dashboard_runtime
+       row in the peak-hours subquery. */
+SELECT
+  'REPORT_METADATA',
+  'Days with dashboard queries but no identified peak hour (expect 0)',
+  distinct_days_dashboard_queries - (SELECT COUNT(*) FROM daily_peak_hours)
+FROM d0_days_data
 
 UNION ALL
 SELECT
