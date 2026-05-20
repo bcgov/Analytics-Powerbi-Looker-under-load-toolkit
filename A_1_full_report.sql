@@ -92,8 +92,8 @@
 
 WITH date_range AS (
   SELECT
-    '2026-01-05' AS analysis_range_first_day,
-    '2026-04-26' AS analysis_range_last_day
+    '2025-11-01' AS analysis_range_first_day,
+    '2026-04-30' AS analysis_range_last_day
 ),
 
 /* ***************************************************************************
