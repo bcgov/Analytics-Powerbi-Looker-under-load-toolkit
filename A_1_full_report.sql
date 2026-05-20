@@ -231,6 +231,110 @@ ranked_peaks AS (
   ) ordered
   CROSS JOIN (SELECT @rn := 0) r
   CROSS JOIN (SELECT @total := COUNT(*) FROM daily_peak_magnitude) t
+),
+
+/* ***************************************************************************
+   DIMENSION 2 — QUERY RATE CTEs
+   Source: A_1_query3_looker_queries_rate.sql
+   *************************************************************************** */
+
+d2_peak_hours AS (
+  SELECT
+    hourly.completed_date_pacific,
+    MIN(hourly.completed_hour_pacific) AS completed_hour_pacific
+  FROM (
+    SELECT
+      DATE(CONVERT_TZ(h.completed_at,'UTC','America/Vancouver'))
+        AS completed_date_pacific,
+      HOUR(CONVERT_TZ(h.completed_at,'UTC','America/Vancouver'))
+        AS completed_hour_pacific,
+      SUM(h.runtime) AS hourly_dashboard_runtime
+    FROM history h
+    JOIN date_range dr ON 1=1
+    WHERE CONVERT_TZ(h.completed_at,'UTC','America/Vancouver')
+          >= dr.analysis_range_first_day
+      AND CONVERT_TZ(h.completed_at,'UTC','America/Vancouver')
+          <  dr.analysis_range_last_day
+      AND h.dashboard_id IS NOT NULL
+      AND h.runtime IS NOT NULL
+    GROUP BY completed_date_pacific, completed_hour_pacific
+  ) hourly
+  JOIN (
+    SELECT
+      x.completed_date_pacific,
+      MAX(x.hourly_dashboard_runtime) AS max_runtime
+    FROM (
+      SELECT
+        DATE(CONVERT_TZ(h2.completed_at,'UTC','America/Vancouver'))
+          AS completed_date_pacific,
+        HOUR(CONVERT_TZ(h2.completed_at,'UTC','America/Vancouver'))
+          AS completed_hour_pacific,
+        SUM(h2.runtime) AS hourly_dashboard_runtime
+      FROM history h2
+      JOIN date_range dr2 ON 1=1
+      WHERE CONVERT_TZ(h2.completed_at,'UTC','America/Vancouver')
+            >= dr2.analysis_range_first_day
+        AND CONVERT_TZ(h2.completed_at,'UTC','America/Vancouver')
+            <  dr2.analysis_range_last_day
+        AND h2.dashboard_id IS NOT NULL
+        AND h2.runtime IS NOT NULL
+      GROUP BY completed_date_pacific, completed_hour_pacific
+    ) x
+    GROUP BY x.completed_date_pacific
+  ) mx
+    ON hourly.completed_date_pacific  = mx.completed_date_pacific
+   AND hourly.hourly_dashboard_runtime = mx.max_runtime
+  GROUP BY hourly.completed_date_pacific
+),
+
+d2_classified_queries AS (
+  SELECT
+    CASE
+      WHEN h.dashboard_id IS NOT NULL THEN 'Dashboard-Only Queries'
+      ELSE 'Non-Dashboard Queries'
+    END AS query_category,
+    CASE
+      WHEN ph.completed_date_pacific IS NOT NULL
+       AND HOUR(CONVERT_TZ(h.created_at,'UTC','America/Vancouver'))
+           = ph.completed_hour_pacific
+      THEN 'Peak-Hours'
+      ELSE 'All-Hours'
+    END AS time_scope,
+    h.created_at
+  FROM history h
+  LEFT JOIN d2_peak_hours ph
+    ON DATE(CONVERT_TZ(h.created_at,'UTC','America/Vancouver'))
+       = ph.completed_date_pacific
+  JOIN date_range dr ON 1=1
+  WHERE CONVERT_TZ(h.created_at,'UTC','America/Vancouver')
+        >= dr.analysis_range_first_day
+    AND CONVERT_TZ(h.created_at,'UTC','America/Vancouver')
+        <  dr.analysis_range_last_day
+),
+
+d2_queries_per_minute AS (
+  SELECT
+    cq.time_scope,
+    cq.query_category,
+    COUNT(*) AS queries_started_in_minute
+  FROM d2_classified_queries cq
+  GROUP BY
+    cq.time_scope,
+    cq.query_category,
+    DATE(CONVERT_TZ(cq.created_at,'UTC','America/Vancouver')),
+    HOUR(CONVERT_TZ(cq.created_at,'UTC','America/Vancouver')),
+    MINUTE(CONVERT_TZ(cq.created_at,'UTC','America/Vancouver'))
+),
+
+d2_base_metrics AS (
+  SELECT
+    qpm.time_scope,
+    qpm.query_category,
+    AVG(qpm.queries_started_in_minute) AS baseline_queries_per_minute,
+    MAX(qpm.queries_started_in_minute) AS max_queries_per_minute,
+    COUNT(*)                            AS total_minutes
+  FROM d2_queries_per_minute qpm
+  GROUP BY qpm.time_scope, qpm.query_category
 )
 
 /* ***************************************************************************
@@ -238,6 +342,9 @@ ranked_peaks AS (
    *************************************************************************** */
 
 /* --- REPORT METADATA --- */
+SELECT result_section, key_value, metric_value, NULL AS col_4, NULL AS col_5
+FROM (
+
 SELECT
   'REPORT_METADATA' AS result_section,
   'Date range' AS key_value,
@@ -422,7 +529,9 @@ SELECT
 FROM dashboard_peak_participation
 GROUP BY dashboard_id
 HAVING COUNT(DISTINCT completed_date_pacific)
-       >= 0.25 * (SELECT COUNT(*) FROM daily_peak_hours);
+       >= 0.25 * (SELECT COUNT(*) FROM daily_peak_hours)
+
+) AS dim1_results
 
 /* =============================================================================
    DIMENSION 2. QUERY RATES
@@ -438,7 +547,44 @@ HAVING COUNT(DISTINCT completed_date_pacific)
    are reported.
    ============================================================================= */
 
--- TODO: SQL placeholder (A_1_query3_looker_queries_rate.sql)
+UNION ALL
+
+/* --- DIMENSION 2: COLUMN HEADINGS --- */
+SELECT
+  'D2_COLUMN_HEADINGS'          AS result_section,
+  'time_scope | query_category' AS key_value,
+  'baseline_queries_per_min'    AS metric_value,
+  'max_queries_per_min'         AS col_4,
+  'p95_queries_per_min'         AS col_5
+
+UNION ALL
+
+/* --- DIMENSION 2: QUERY RATE DATA --- */
+SELECT
+  'D2_QUERY_RATE'                                         AS result_section,
+  CONCAT(bm.time_scope, ' | ', bm.query_category)        AS key_value,
+  ROUND(bm.baseline_queries_per_minute, 2)                AS metric_value,
+  bm.max_queries_per_minute                               AS col_4,
+  (
+    SELECT qpm2.queries_started_in_minute
+    FROM (
+      SELECT
+        qpm_inner.queries_started_in_minute,
+        @d2rn := @d2rn + 1 AS rownum
+      FROM (
+        SELECT qpm_sub.queries_started_in_minute
+        FROM d2_queries_per_minute qpm_sub
+        WHERE qpm_sub.time_scope     = bm.time_scope
+          AND qpm_sub.query_category = bm.query_category
+        ORDER BY qpm_sub.queries_started_in_minute
+      ) qpm_inner
+      CROSS JOIN (SELECT @d2rn := 0) r
+    ) qpm2
+    WHERE qpm2.rownum >= CEIL(0.95 * bm.total_minutes)
+    ORDER BY qpm2.rownum
+    LIMIT 1
+  )                                                       AS col_5
+FROM d2_base_metrics bm;
 
 
 /* =============================================================================
