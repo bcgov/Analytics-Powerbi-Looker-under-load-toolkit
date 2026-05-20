@@ -37,6 +37,31 @@
     *************************************************************************** */
 
 /* ==========================================================================
+    DIMENSION 0. Sanity Checks
+
+    In this section/dimension, we have added some basic queries to 
+    sanity*check the data and ensure our assumptions about the dataset hold true. 
+    These queries are not part of the final report output but are crucial
+    for validating the integrity of the data and the correctness of our subsequent 
+    analyses.
+    *************************************************************************** */
+
+/* --------------------------------------------------------------------------
+   D0.1 — DAYS WITH DATA IN RANGE
+
+   Counts how many distinct calendar days (Pacific Time) have any rows in the
+   history table within the analysis range, broken down by:
+     - All queries (data coverage check)
+     - Dashboard-generated queries only (history.dashboard_id IS NOT NULL)
+   The difference reveals days that have Looker activity but no interactive
+   dashboard use (e.g. API queries, scheduled runs, or genuine zero-use days).
+
+   Output rows: D0_SANITY_DAYS_WITH_DATA
+   (Integrated into the main unified query below — no separate run needed.)
+   --------------------------------------------------------------------------- */
+
+
+/* ==========================================================================
     DIMENSION 1. DAILY PEAKS
 
     Summarizes daily peak *interactive dashboard* behavior across an extended
@@ -94,6 +119,27 @@ WITH date_range AS (
   SELECT
     '2026-01-05' AS analysis_range_first_day,
     '2026-04-26' AS analysis_range_last_day
+),
+
+/* ***************************************************************************
+   D0.1 — DAYS WITH DATA IN RANGE (CTE)
+   *************************************************************************** */
+d0_days_data AS (
+  SELECT
+    COUNT(DISTINCT
+      CASE WHEN h.dashboard_id IS NOT NULL
+           THEN DATE(CONVERT_TZ(h.completed_at,'UTC','America/Vancouver'))
+      END
+    ) AS distinct_days_dashboard_queries,
+    COUNT(DISTINCT
+      DATE(CONVERT_TZ(h.completed_at,'UTC','America/Vancouver'))
+    ) AS distinct_days_any_query
+  FROM history h
+  JOIN date_range dr ON 1=1
+  WHERE CONVERT_TZ(h.completed_at,'UTC','America/Vancouver')
+          >= dr.analysis_range_first_day
+    AND CONVERT_TZ(h.completed_at,'UTC','America/Vancouver')
+          <  dr.analysis_range_last_day
 ),
 
 /* ***************************************************************************
@@ -202,6 +248,28 @@ ranked_peaks AS (
    FINAL SINGLE RESULT SET (REPORT FORMAT)
    *************************************************************************** */
 
+/* --- D0 SANITY: DAYS WITH DATA IN RANGE --- */
+SELECT
+  'D0_SANITY_DAYS_WITH_DATA'        AS result_section,
+  'distinct_days_dashboard_queries'  AS key_value,
+  distinct_days_dashboard_queries    AS metric_value
+FROM d0_days_data
+
+UNION ALL
+SELECT
+  'D0_SANITY_DAYS_WITH_DATA',
+  'distinct_days_any_query',
+  distinct_days_any_query
+FROM d0_days_data
+
+UNION ALL
+SELECT
+  'D0_SANITY_DAYS_WITH_DATA',
+  'days_with_no_dashboard_activity',
+  distinct_days_any_query - distinct_days_dashboard_queries
+FROM d0_days_data
+
+UNION ALL
 /* --- REPORT METADATA --- */
 SELECT
   'REPORT_METADATA' AS result_section,
@@ -343,16 +411,98 @@ HAVING COUNT(DISTINCT completed_date_pacific)
        >= 0.25 * (SELECT COUNT(*) FROM daily_peak_hours);
 
 /* =============================================================================
-    DIMENSION 2. QUERY RATES
-   (All*Hours vs Peak*Hours, Dashboard vs Non*Dashboard)
+   DIMENSION 2. QUERY RATES
+   (All-Hours vs Peak-Hours, Dashboard vs Non-Dashboard)
+   Source: A_1_query3_looker_queries_rate.sql
 
    PURPOSE
-   This query summarizes how many Looker queries are started per minute over a
-   specified date range. Results are split into:
-     - All-Hours vs Peak*Hours
-     - Dashboard*only vs Non*dashboard queries
+   Summarizes how many Looker queries are started per minute over the date
+   range. Results are split into:
+     - All-Hours vs Peak-Hours
+     - Dashboard-only vs Non-dashboard queries
    For each combination, baseline (average), P95, and maximum query rates
    are reported.
-
    ============================================================================= */
 
+-- TODO: SQL placeholder (A_1_query3_looker_queries_rate.sql)
+
+
+/* =============================================================================
+   DIMENSION 3. OVERLAPPING / CONCURRENT QUERIES
+   Source: A_1_query4_looker_queries_overlapping.sql
+
+   PURPOSE
+   Measures how many queries are executing simultaneously during peak hours.
+   Establishes the true concurrency envelope that the Power BI gateway and
+   Redshift WLM must absorb.
+   ============================================================================= */
+
+-- TODO: SQL placeholder (A_1_query4_looker_queries_overlapping.sql)
+
+
+/* =============================================================================
+   DIMENSION 4. QUERY FAN-OUT
+   Source: A_1_query5_fan-out.sql
+
+   PURPOSE
+   Measures how many SQL queries a single dashboard load generates against
+   Redshift (i.e. the fan-out ratio per dashboard session). Used to estimate
+   the multiplier between Power BI report refreshes and downstream Redshift
+   query volume.
+   ============================================================================= */
+
+-- TODO: SQL placeholder (A_1_query5_fan-out.sql)
+
+
+/* =============================================================================
+   DIMENSION 5. CACHING
+   Source: A_1_query6_caching.sql
+
+   PURPOSE
+   Quantifies how much of the current load is absorbed by Looker's query
+   cache. A high cache-hit rate means the raw Redshift load is lower than
+   the total query count suggests. This factor must be accounted for when
+   sizing the Power BI gateway (which has no equivalent cache layer by default).
+   ============================================================================= */
+
+-- TODO: SQL placeholder (A_1_query6_caching.sql)
+
+
+/* =============================================================================
+   DIMENSION 6. QUERY SHAPE
+   Source: A_1_query7_query_shape.sql
+
+   PURPOSE
+   Characterises the SQL queries that reach Redshift: runtime distribution,
+   result-set size, and query patterns. Drives selection of representative
+   DAX query templates in Phase C of the load-test plan.
+   ============================================================================= */
+
+-- TODO: SQL placeholder (A_1_query7_query_shape.sql)
+
+
+/* =============================================================================
+   DIMENSION 7. REDSHIFT WLM QUEUE TIME
+   Source: A_1_query8_redshift_wlm_queue_time.sql
+
+   PURPOSE
+   Measures time queries spend waiting in Redshift WLM queues during peak
+   hours. High queue time indicates Redshift is already a bottleneck and must
+   be factored into baseline latency expectations for the Power BI workload.
+   ============================================================================= */
+
+-- TODO: SQL placeholder (A_1_query8_redshift_wlm_queue_time.sql)
+
+
+/* =============================================================================
+   DIMENSION 8. REDSHIFT CPU SATURATION
+   Source: A_1_query9_redshift_CPU_saturation.sql
+
+   PURPOSE
+   Measures Redshift CPU utilisation during peak dashboard hours. Establishes
+   the headroom (or lack thereof) available to absorb the Power BI workload
+   and informs whether a Redshift scaling change is needed alongside the
+   gateway sizing exercise.
+   ============================================================================= */
+
+-- TODO: SQL placeholder (A_1_query9_redshift_CPU_saturation.sql)
