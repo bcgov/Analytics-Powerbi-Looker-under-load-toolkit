@@ -92,7 +92,7 @@
 
 WITH date_range AS (
   SELECT
-    '2025-11-01' AS analysis_range_first_day,
+    '2026-04-01' AS analysis_range_first_day,
     '2026-04-30' AS analysis_range_last_day
 ),
 
@@ -335,6 +335,147 @@ d2_base_metrics AS (
     COUNT(*)                            AS total_minutes
   FROM d2_queries_per_minute qpm
   GROUP BY qpm.time_scope, qpm.query_category
+),
+
+/* ***************************************************************************
+   DIMENSION 3 — CONCURRENCY CTEs
+   Source: A_1_query4_looker_queries_overlapping.sql
+   *************************************************************************** */
+
+d3_peak_hours AS (
+  SELECT
+    hourly.completed_date_pacific,
+    MIN(hourly.completed_hour_pacific) AS completed_hour_pacific
+  FROM (
+    SELECT
+      DATE(CONVERT_TZ(h.completed_at,'UTC','America/Vancouver'))
+        AS completed_date_pacific,
+      HOUR(CONVERT_TZ(h.completed_at,'UTC','America/Vancouver'))
+        AS completed_hour_pacific,
+      SUM(h.runtime) AS hourly_dashboard_runtime
+    FROM history h
+    JOIN date_range dr ON 1=1
+    WHERE CONVERT_TZ(h.completed_at,'UTC','America/Vancouver')
+          >= dr.analysis_range_first_day
+      AND CONVERT_TZ(h.completed_at,'UTC','America/Vancouver')
+          <  dr.analysis_range_last_day
+      AND h.dashboard_id IS NOT NULL
+      AND h.runtime IS NOT NULL
+    GROUP BY
+      completed_date_pacific,
+      completed_hour_pacific
+  ) hourly
+  JOIN (
+    SELECT
+      x.completed_date_pacific,
+      MAX(x.hourly_dashboard_runtime) AS max_runtime
+    FROM (
+      SELECT
+        DATE(CONVERT_TZ(h2.completed_at,'UTC','America/Vancouver'))
+          AS completed_date_pacific,
+        HOUR(CONVERT_TZ(h2.completed_at,'UTC','America/Vancouver'))
+          AS completed_hour_pacific,
+        SUM(h2.runtime) AS hourly_dashboard_runtime
+      FROM history h2
+      JOIN date_range dr2 ON 1=1
+      WHERE CONVERT_TZ(h2.completed_at,'UTC','America/Vancouver')
+            >= dr2.analysis_range_first_day
+        AND CONVERT_TZ(h2.completed_at,'UTC','America/Vancouver')
+            <  dr2.analysis_range_last_day
+        AND h2.dashboard_id IS NOT NULL
+        AND h2.runtime IS NOT NULL
+      GROUP BY
+        completed_date_pacific,
+        completed_hour_pacific
+    ) x
+    GROUP BY x.completed_date_pacific
+  ) mx
+    ON hourly.completed_date_pacific  = mx.completed_date_pacific
+   AND hourly.hourly_dashboard_runtime = mx.max_runtime
+  GROUP BY hourly.completed_date_pacific
+),
+
+d3_classified_queries AS (
+  SELECT
+    CASE
+      WHEN h.dashboard_id IS NOT NULL THEN 'Dashboard-Only Queries'
+      ELSE 'Non-Dashboard Queries'
+    END AS query_category,
+    CASE
+      WHEN ph.completed_date_pacific IS NOT NULL
+       AND HOUR(CONVERT_TZ(h.created_at,'UTC','America/Vancouver'))
+           = ph.completed_hour_pacific
+      THEN 'Peak-Hours'
+      ELSE 'All-Hours'
+    END AS time_scope,
+    h.created_at,
+    h.completed_at
+  FROM history h
+  LEFT JOIN d3_peak_hours ph
+    ON DATE(CONVERT_TZ(h.created_at,'UTC','America/Vancouver'))
+       = ph.completed_date_pacific
+  JOIN date_range dr ON 1=1
+  WHERE h.completed_at IS NOT NULL
+    AND CONVERT_TZ(h.created_at,'UTC','America/Vancouver')
+        >= dr.analysis_range_first_day
+    AND CONVERT_TZ(h.created_at,'UTC','America/Vancouver')
+        <  dr.analysis_range_last_day
+),
+
+d3_expanded_minutes AS (
+  SELECT
+    cq.time_scope,
+    cq.query_category,
+    cq.created_at + INTERVAL seqs.seq MINUTE AS minute_bucket
+  FROM d3_classified_queries cq
+  JOIN (
+    /* Cross-join of hundreds × tens × units generates 0–1199 (1,200 values).
+       Max observed runtime is ~1,080 min (64,826 s); this covers all queries. */
+    SELECT (h.seq + t.seq + u.seq) AS seq
+    FROM
+      (SELECT    0 AS seq UNION ALL SELECT  100 UNION ALL SELECT  200 UNION ALL
+       SELECT  300        UNION ALL SELECT  400 UNION ALL SELECT  500 UNION ALL
+       SELECT  600        UNION ALL SELECT  700 UNION ALL SELECT  800 UNION ALL
+       SELECT  900        UNION ALL SELECT 1000 UNION ALL SELECT 1100) h
+    CROSS JOIN
+      (SELECT  0 AS seq UNION ALL SELECT 10 UNION ALL SELECT 20 UNION ALL
+       SELECT 30          UNION ALL SELECT 40 UNION ALL SELECT 50 UNION ALL
+       SELECT 60          UNION ALL SELECT 70 UNION ALL SELECT 80 UNION ALL
+       SELECT 90) t
+    CROSS JOIN
+      (SELECT 0 AS seq UNION ALL SELECT 1 UNION ALL SELECT 2 UNION ALL
+       SELECT 3           UNION ALL SELECT 4 UNION ALL SELECT 5 UNION ALL
+       SELECT 6           UNION ALL SELECT 7 UNION ALL SELECT 8 UNION ALL
+       SELECT 9) u
+  ) seqs
+  WHERE cq.created_at + INTERVAL seqs.seq MINUTE < cq.completed_at
+),
+
+d3_concurrency_per_minute AS (
+  SELECT
+    em.time_scope,
+    em.query_category,
+    COUNT(*) AS overlapping_queries
+  FROM d3_expanded_minutes em
+  GROUP BY
+    em.time_scope,
+    em.query_category,
+    DATE(CONVERT_TZ(em.minute_bucket,'UTC','America/Vancouver')),
+    HOUR(CONVERT_TZ(em.minute_bucket,'UTC','America/Vancouver')),
+    MINUTE(CONVERT_TZ(em.minute_bucket,'UTC','America/Vancouver'))
+),
+
+d3_base_metrics AS (
+  SELECT
+    cpm.time_scope,
+    cpm.query_category,
+    AVG(cpm.overlapping_queries) AS baseline_concurrency,
+    MAX(cpm.overlapping_queries) AS max_concurrency,
+    COUNT(*)                      AS total_minutes
+  FROM d3_concurrency_per_minute cpm
+  GROUP BY
+    cpm.time_scope,
+    cpm.query_category
 )
 
 /* ***************************************************************************
@@ -584,7 +725,7 @@ SELECT
     ORDER BY qpm2.rownum
     LIMIT 1
   )                                                       AS col_5
-FROM d2_base_metrics bm;
+FROM d2_base_metrics bm
 
 
 /* =============================================================================
@@ -597,7 +738,44 @@ FROM d2_base_metrics bm;
    Redshift WLM must absorb.
    ============================================================================= */
 
--- TODO: SQL placeholder (A_1_query4_looker_queries_overlapping.sql)
+UNION ALL
+
+/* --- DIMENSION 3: COLUMN HEADINGS --- */
+SELECT
+  'D3_COLUMN_HEADINGS'           AS result_section,
+  'time_scope | query_category'  AS key_value,
+  'baseline_concurrent_queries'  AS metric_value,
+  'max_concurrent_queries'       AS col_4,
+  'p95_concurrent_queries'       AS col_5
+
+UNION ALL
+
+/* --- DIMENSION 3: CONCURRENCY DATA --- */
+SELECT
+  'D3_CONCURRENT_QUERIES'                                 AS result_section,
+  CONCAT(bm.time_scope, ' | ', bm.query_category)        AS key_value,
+  ROUND(bm.baseline_concurrency, 2)                       AS metric_value,
+  bm.max_concurrency                                      AS col_4,
+  (
+    SELECT cpm2.overlapping_queries
+    FROM (
+      SELECT
+        cpm_inner.overlapping_queries,
+        @d3rn := @d3rn + 1 AS rownum
+      FROM (
+        SELECT cpm_sub.overlapping_queries
+        FROM d3_concurrency_per_minute cpm_sub
+        WHERE cpm_sub.time_scope     = bm.time_scope
+          AND cpm_sub.query_category = bm.query_category
+        ORDER BY cpm_sub.overlapping_queries
+      ) cpm_inner
+      CROSS JOIN (SELECT @d3rn := 0) r
+    ) cpm2
+    WHERE cpm2.rownum >= CEIL(0.95 * bm.total_minutes)
+    ORDER BY cpm2.rownum
+    LIMIT 1
+  )                                                       AS col_5
+FROM d3_base_metrics bm;
 
 
 /* =============================================================================
