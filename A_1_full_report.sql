@@ -898,8 +898,7 @@ SELECT
   fm.queries_per_dashboard_session        AS metric_value,
   fm.dashboard_sessions_count             AS col_4,
   fm.total_runtime_seconds                AS col_5
-FROM d4_fanout_metrics fm
-ORDER BY fm.queries_per_dashboard_session DESC, fm.total_runtime_seconds DESC;
+FROM d4_fanout_metrics fm;
 
 
 /* =============================================================================
