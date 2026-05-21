@@ -8,21 +8,21 @@
    
    STRUCTURE
 
-   - Is self-documented (purpose + read*only note at top)
+   - Is self-documented (purpose + read-only note at top)
    - Is broken into stress dimensions (each with purpose + outputs + commented SQL)
    - Includes intermediate sanity*check outputs
    - Ends with a structured meta*output that tells you exactly what DAX workload to simulate
 
    Scope
 
-   - Dashboard*generated queries only (history.dashboard_id IS NOT NULL)
+   - Dashboard-generated queries only (history.dashboard_id IS NOT NULL)
    - One peak hour per day (hour with max dashboard runtime)
    ============================================================================= */
 
 /* ************************************************************************* 
   READ-ONLY QUERIES
 
-   This SQL is strictly read*only. It only SELECTs and aggregates existing data
+   This SQL is strictly read-only. It only SELECTs and aggregates existing data
    and does NOT insert, update, delete, or modify any database objects. 
    *************************************************************************** */
 
@@ -48,7 +48,7 @@
 /* ***************************************************************************
    OUTPUTS
 
-   The result set contains a single, self*describing report organized into
+   The result set contains a single, self-describing report organized into
    labeled sections via the `result_section` column. Each row represents a
    specific metric, distribution element, or explanatory note.
 
@@ -67,7 +67,7 @@
       - Explanatory notes for interpreting later sections
 
    2. A_PEAK_HOUR_DISTRIBUTION
-      - Distribution of peak hour*of*day (Pacific Time)
+      - Distribution of peak hour-of-day (Pacific Time)
       - Shows how often each hour is identified as the daily peak
 
    3. B_PEAK_RUNTIME (Peak Hour Runtime Magnitude)
@@ -237,7 +237,6 @@ ranked_peaks AS (
 
 /* ***************************************************************************
    DIMENSION 2 — QUERY RATE COMMON TABLE EXPRESSIONS (CTEs)
-   Source: A_1_query3_looker_queries_rate.sql
    *************************************************************************** */
 
 d2_peak_hours AS (
@@ -341,7 +340,6 @@ d2_base_metrics AS (
 
 /* ***************************************************************************
    DIMENSION 3 — CONCURRENCY COMMON TABLE EXPRESSIONS (CTEs)
-   Source: A_1_query4_looker_queries_overlapping.sql
    *************************************************************************** */
 
 d3_peak_hours AS (
@@ -482,7 +480,6 @@ d3_base_metrics AS (
 
 /* ***************************************************************************
    DIMENSION 4 — FAN-OUT COMMON TABLE EXPRESSIONS (CTEs)
-   Source: A_1_query5_fan-out.sql
    *************************************************************************** */
 
 d4_peak_hours AS (
@@ -572,7 +569,6 @@ d4_fanout_metrics AS (
 
 /* ***************************************************************************
    DIMENSION 5 — CACHING COMMON TABLE EXPRESSIONS (CTEs)
-   Source: A_1_query6_caching.sql
    *************************************************************************** */
 
 d5_peak_hours AS (
@@ -664,7 +660,6 @@ d5_cache_metrics AS (
 
 /* ***************************************************************************
    DIMENSION 6 — QUERY SHAPE COMMON TABLE EXPRESSIONS (CTEs)
-   Source: A_1_query7_query_shape.sql
    *************************************************************************** */
 
 d6_peak_hours AS (
@@ -1251,7 +1246,7 @@ SELECT
 
 
 /* =============================================================================
-   DIAGNOSTIC — DAYS WITH DASHBOARD QUERIES BUT NO IDENTIFIED PEAK HOUR
+   EXTRA - DIAGNOSTIC — DAYS WITH DASHBOARD QUERIES BUT NO IDENTIFIED PEAK HOUR
 
    PURPOSE
    Investigates the discrepancy between 'Days with dashboard queries' and
