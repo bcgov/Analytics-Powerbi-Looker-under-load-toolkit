@@ -1243,9 +1243,9 @@ UNION ALL
 SELECT
   'D7_PEAK_HOURS'                                                       AS result_section,
   CAST(ph.completed_date_pacific AS CHAR)                               AS key_value,
-  ph.completed_hour_pacific                                              AS metric_value,
+  ph.peak_hour_pacific                                                   AS metric_value,
   CONCAT('(''', CAST(ph.completed_date_pacific AS CHAR), ''', ',
-         ph.completed_hour_pacific, '),')                               AS col_4,
+         ph.peak_hour_pacific, '),')                                    AS col_4,
   NULL                                                                   AS col_5
 FROM daily_peak_hours ph;
 
