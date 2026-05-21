@@ -267,5 +267,16 @@ SELECT
   CAST(s.exec_fraction_of_total_time AS VARCHAR)             AS metric_value,
   CAST(s.avg_exec_time_seconds AS VARCHAR)                   AS col_4,
   CAST(s.avg_queue_time_seconds AS VARCHAR)                  AS col_5
-FROM d8_cpu_summary s;
+FROM d8_cpu_summary s
+ORDER BY
+  CASE result_section
+    WHEN 'REPORT_METADATA'    THEN 1
+    WHEN 'D7_COLUMN_HEADINGS' THEN 2
+    WHEN 'D7_WLM_QUEUE'       THEN 3
+    WHEN 'D7_WLM_EXEC'        THEN 4
+    WHEN 'D8_COLUMN_HEADINGS' THEN 5
+    WHEN 'D8_CPU_SATURATION'  THEN 6
+    ELSE 9
+  END,
+  key_value;
 
