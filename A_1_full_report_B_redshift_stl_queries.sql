@@ -27,6 +27,25 @@
        Establishes headroom (or lack thereof) available to absorb the Power BI
        workload alongside the existing Looker load.
 
+   BACKGROUND: WLM (Workload Management)
+   WLM is Redshift's queue system that controls how queries are admitted and
+   scheduled for execution. When a query arrives, WLM decides:
+     - Which queue to place it in (service class 14 vs 100 in our data)
+     - How many queries can run concurrently in that queue
+     - Whether to hold it waiting (queue time) until a slot opens, then let
+       it execute (exec time)
+
+   In our data:
+     - Service class 14  -- a named/priority queue (likely configured for
+       specific users or query types); well-behaved with low queue times
+     - Service class 100 -- the default catch-all queue; everything else
+       lands here, which is why it shows higher queue pressure and longer
+       exec times
+
+   The D7 metric 'exec_fraction_of_total_time' asks: of the time from when
+   a query was submitted to when it finished, what fraction was actual
+   execution vs sitting in the WLM queue waiting for a slot?
+
    ============================================================================= */
 
 /* READ-ONLY QUERY
@@ -263,6 +282,16 @@ SELECT
 
 UNION ALL
 
+/* --- DIMENSION 8: NOTE --- */
+SELECT
+  'D8_NOTE'                                                  AS result_section,
+  'Data scope'                                               AS key_value,
+  'Covers ALL WLM traffic (not Looker-only). Window may include ad-hoc or test query activity - cross-reference with Looker history to exclude non-production load.' AS metric_value,
+  NULL                                                        AS col_4,
+  NULL                                                        AS col_5
+
+UNION ALL
+
 /* --- DIMENSION 8: CPU SATURATION PROXY (per peak day, all WLM traffic) --- */
 SELECT
   'D8_CPU_SATURATION'                                        AS result_section,
@@ -280,7 +309,8 @@ ORDER BY
     WHEN 'D7_WLM_QUEUE'       THEN 3
     WHEN 'D7_WLM_EXEC'        THEN 4
     WHEN 'D8_COLUMN_HEADINGS' THEN 5
-    WHEN 'D8_CPU_SATURATION'  THEN 6
+    WHEN 'D8_NOTE'            THEN 6
+    WHEN 'D8_CPU_SATURATION'  THEN 7
     ELSE 9
   END,
   key_value;
