@@ -154,22 +154,22 @@ UNION ALL
 
 /* --- DIMENSION 7: WLM QUEUE DATA (aggregated across all peak hours) --- */
 SELECT
-  'D7_WLM_QUEUE'              AS result_section,
-  CAST(s.service_class AS VARCHAR) AS key_value,
-  s.pct_queries_queued        AS metric_value,
-  s.avg_queue_time_seconds    AS col_4,
-  s.max_queue_time_seconds    AS col_5
+  'D7_WLM_QUEUE'                              AS result_section,
+  CAST(s.service_class AS VARCHAR)            AS key_value,
+  CAST(s.pct_queries_queued AS VARCHAR)       AS metric_value,
+  CAST(s.avg_queue_time_seconds AS VARCHAR)   AS col_4,
+  CAST(s.max_queue_time_seconds AS VARCHAR)   AS col_5
 FROM d7_wlm_summary s
 
 UNION ALL
 
 /* --- DIMENSION 7: EXEC TIME CONTEXT (avg exec time vs avg queue time) --- */
 SELECT
-  'D7_WLM_EXEC'               AS result_section,
-  CAST(s.service_class AS VARCHAR) AS key_value,
-  s.avg_exec_time_seconds     AS metric_value,
-  s.queued_queries            AS col_4,
-  s.total_queries             AS col_5
+  'D7_WLM_EXEC'                               AS result_section,
+  CAST(s.service_class AS VARCHAR)            AS key_value,
+  CAST(s.avg_exec_time_seconds AS VARCHAR)    AS metric_value,
+  CAST(s.queued_queries AS VARCHAR)           AS col_4,
+  CAST(s.total_queries AS VARCHAR)            AS col_5
 FROM d7_wlm_summary s;
 
 
