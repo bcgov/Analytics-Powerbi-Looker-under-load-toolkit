@@ -41,18 +41,46 @@
 
 WITH peak_hours AS (
   /* ---------------------------------------------------------------------------
-     PASTE PEAK HOURS HERE
-     Replace the placeholder rows with the D7_PEAK_HOURS values from
-     A_1_full_report_looker_history_queries.sql.
+     PEAK HOURS — April 2026 (2026-04-01 to 2026-04-30)
+     Source: D7_PEAK_HOURS rows from A_1_full_report_A_looker_history_queries.sql.
+
+     To use a different date range: re-run A_1_full_report_A_looker_history_queries.sql
+     with the new date range, then replace the VALUES rows below with the col_4
+     values from the D7_PEAK_HOURS section of that report.
      Format: ('YYYY-MM-DD', HH)
      --------------------------------------------------------------------------- */
   SELECT peak_date::DATE AS completed_date_pacific,
          peak_hour       AS completed_hour_pacific
   FROM (
     VALUES
-      ('1900-01-01', 0)   -- replace with real peak hours from D7_PEAK_HOURS
+      ('2026-04-01', 9),
+      ('2026-04-02', 11),
+      ('2026-04-03', 6),
+      ('2026-04-04', 6),
+      ('2026-04-05', 4),
+      ('2026-04-06', 14),
+      ('2026-04-07', 9),
+      ('2026-04-08', 8),
+      ('2026-04-09', 9),
+      ('2026-04-10', 14),
+      ('2026-04-11', 6),
+      ('2026-04-12', 4),
+      ('2026-04-13', 14),
+      ('2026-04-14', 16),
+      ('2026-04-15', 11),
+      ('2026-04-16', 11),
+      ('2026-04-17', 10),
+      ('2026-04-19', 15),
+      ('2026-04-20', 14),
+      ('2026-04-21', 14),
+      ('2026-04-22', 13),
+      ('2026-04-23', 11),
+      ('2026-04-24', 11),
+      ('2026-04-26', 23),
+      ('2026-04-27', 11),
+      ('2026-04-28', 9),
+      ('2026-04-29', 8)
   ) ph(peak_date, peak_hour)
-  WHERE peak_date <> '1900-01-01'   -- remove placeholder guard once rows are pasted
 ),
 
 /* =============================================================================
