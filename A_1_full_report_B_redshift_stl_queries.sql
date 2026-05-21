@@ -137,6 +137,48 @@ d7_wlm_summary AS (
     )                                                                     AS avg_exec_time_seconds
   FROM d7_peak_hour_wlm w
   GROUP BY w.service_class
+),
+
+/* =============================================================================
+   DIMENSION 8 - CPU SATURATION CTEs
+   Reuses config and peak_hours from above.
+   exec_fraction_of_total_time: ratio of execution time to (queue + exec) time.
+     Near 1.0 = CPU-bound (executing; little WLM headroom to absorb PBI load)
+     Near 0.0 = queue-bound (queries waiting for admission, not CPU)
+   ============================================================================= */
+
+d8_peak_hour_exec AS (
+  SELECT
+    ph.completed_date_pacific   AS peak_date_pacific,
+    ph.completed_hour_pacific   AS peak_hour_pacific,
+    w.total_queue_time,
+    w.total_exec_time
+  FROM stl_wlm_query w
+  JOIN stl_query q
+    ON w.query = q.query
+  JOIN peak_hours ph
+    ON DATE(CONVERT_TIMEZONE('UTC', 'America/Vancouver', q.starttime))              = ph.completed_date_pacific
+   AND EXTRACT(hour FROM CONVERT_TIMEZONE('UTC', 'America/Vancouver', q.starttime)) = ph.completed_hour_pacific
+  JOIN config c ON 1 = 1
+  WHERE q.starttime >= c.analysis_start
+    AND q.starttime <  c.analysis_end
+    AND q.endtime IS NOT NULL
+),
+
+d8_cpu_summary AS (
+  SELECT
+    peak_date_pacific,
+    peak_hour_pacific,
+    COUNT(*)                                                                       AS total_queries,
+    ROUND(CAST(AVG(total_exec_time)  / 1000000.0 AS numeric(18,2)), 2)            AS avg_exec_time_seconds,
+    ROUND(CAST(AVG(total_queue_time) / 1000000.0 AS numeric(18,2)), 2)            AS avg_queue_time_seconds,
+    ROUND(
+      CAST(AVG(total_exec_time) AS numeric(18,6))
+        / NULLIF(CAST(AVG(total_queue_time + total_exec_time) AS numeric(18,6)), 0),
+      2
+    )                                                                              AS exec_fraction_of_total_time
+  FROM d8_peak_hour_exec
+  GROUP BY peak_date_pacific, peak_hour_pacific
 )
 
 /* =============================================================================
@@ -204,17 +246,26 @@ SELECT
   CAST(s.avg_exec_time_seconds AS VARCHAR)    AS metric_value,
   CAST(s.queued_queries AS VARCHAR)           AS col_4,
   CAST(s.total_queries AS VARCHAR)            AS col_5
-FROM d7_wlm_summary s;
+FROM d7_wlm_summary s
 
+UNION ALL
 
-/* =============================================================================
-   DIMENSION 8. REDSHIFT CPU SATURATION
-   Source: A_1_query9_redshift_CPU_saturation.sql
+/* --- DIMENSION 8: COLUMN HEADINGS --- */
+SELECT
+  'D8_COLUMN_HEADINGS'        AS result_section,
+  'peak_date'                 AS key_value,
+  'exec_fraction_of_total'    AS metric_value,
+  'avg_exec_time_seconds'     AS col_4,
+  'avg_queue_time_seconds'    AS col_5
 
-   PURPOSE
-   Measures Redshift CPU utilisation during peak dashboard hours. Establishes
-   the headroom (or lack thereof) available to absorb the Power BI workload
-   and informs whether a Redshift scaling change is needed alongside the
-   gateway sizing exercise.
-   ============================================================================= */
+UNION ALL
+
+/* --- DIMENSION 8: CPU SATURATION PROXY (per peak day, all WLM traffic) --- */
+SELECT
+  'D8_CPU_SATURATION'                                        AS result_section,
+  CAST(s.peak_date_pacific AS VARCHAR)                       AS key_value,
+  CAST(s.exec_fraction_of_total_time AS VARCHAR)             AS metric_value,
+  CAST(s.avg_exec_time_seconds AS VARCHAR)                   AS col_4,
+  CAST(s.avg_queue_time_seconds AS VARCHAR)                  AS col_5
+FROM d8_cpu_summary s;
 
