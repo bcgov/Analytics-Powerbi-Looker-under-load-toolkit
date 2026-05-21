@@ -1,15 +1,15 @@
 /* =============================================================================
-   TITLE (READ-ONLY): Looker Under-Load Stress Profile — Redshift Dimensions
+   TITLE (READ-ONLY): Looker Under-Load Stress Profile - Redshift Dimensions
    Companion to: A_1_full_report_A_looker_history_queries.sql
 
    CONNECTION: redshift_pacific_time
    SCHEMA:     atomic   (stl_query and stl_wlm_query live here)
    Run in SQL Runner on the redshift_pacific_time connection with schema set to atomic.
 
-   ⚠  STL RETENTION WARNING
+   !! STL RETENTION WARNING !!
    Redshift STL tables (stl_query, stl_wlm_query) retain approximately 7 days
    of history. This report is SELF-CONTAINED and analyses the last 7 days
-   automatically — no input from A_1_full_report_A_looker_history_queries.sql
+   automatically - no input from A_1_full_report_A_looker_history_queries.sql
    is required. Run this file promptly after a load event; data older than
    ~7 days is permanently lost from STL tables.
 
@@ -17,12 +17,12 @@
    Covers the Redshift-side dimensions of the stress profile that cannot be
    queried from the Looker history table:
 
-     DIMENSION 7 — WLM Queue Time
+     DIMENSION 7 - WLM Queue Time
        Measures how long Looker queries waited in Redshift WLM queues during
        peak hours. Establishes the admission-pressure baseline that Power BI
        load will need to account for.
 
-     DIMENSION 8 — Redshift CPU Saturation
+     DIMENSION 8 - Redshift CPU Saturation
        Measures Redshift CPU utilisation during peak dashboard hours.
        Establishes headroom (or lack thereof) available to absorb the Power BI
        workload alongside the existing Looker load.
@@ -94,7 +94,7 @@ peak_hours AS (
 ),
 
 /* =============================================================================
-   DIMENSION 7 — WLM QUEUE TIME CTEs
+   DIMENSION 7 - WLM QUEUE TIME CTEs
    ============================================================================= */
 
 d7_peak_hour_wlm AS (
@@ -160,7 +160,7 @@ UNION ALL
 SELECT
   'REPORT_METADATA'                                          AS result_section,
   'STL retention warning'                                    AS key_value,
-  'STL tables retain ~7 days only — run promptly after load events' AS metric_value,
+  'STL tables retain ~7 days only - run promptly after load events' AS metric_value,
   NULL                                                        AS col_4,
   NULL                                                        AS col_5
 
@@ -225,12 +225,12 @@ FROM d7_wlm_summary s;
    Covers the Redshift-side dimensions of the stress profile that cannot be
    queried from the Looker history table:
 
-     DIMENSION 7 — WLM Queue Time
+     DIMENSION 7 - WLM Queue Time
        Measures how long Looker queries waited in Redshift WLM queues during
        peak hours. Establishes the admission-pressure baseline that Power BI
        load will need to account for.
 
-     DIMENSION 8 — Redshift CPU Saturation
+     DIMENSION 8 - Redshift CPU Saturation
        Measures Redshift CPU utilisation during peak dashboard hours.
        Establishes headroom (or lack thereof) available to absorb the Power BI
        workload alongside the existing Looker load.
@@ -241,16 +241,16 @@ FROM d7_wlm_summary s;
    This SQL is strictly read-only and does not modify any database objects. */
 
 /* ---------------------------------------------------------------------------
-   INPUT — STEP 1: SET DATE RANGE
+   INPUT - STEP 1: SET DATE RANGE
    This must match the date range used in A_1_full_report_looker_history_queries.sql.
    --------------------------------------------------------------------------- */
 /* ---------------------------------------------------------------------------
-   INPUT — STEP 2: PASTE PEAK HOURS FROM LOOKER REPORT
+   INPUT - STEP 2: PASTE PEAK HOURS FROM LOOKER REPORT
    Run A_1_full_report_A_looker_history_queries.sql first.
    In the D7_PEAK_HOURS output rows, col_4 is already formatted as a
    UNION ALL SELECT entry. Use the terminal script in the D7 comment of that
    file to extract the list, then replace the UNION ALL SELECT rows in the
-   peak_hours CTE below (keep the first SELECT row — it sets column names).
+   peak_hours CTE below (keep the first SELECT row - it sets column names).
 
    Example col_4 value from Looker report:
      EXTRACTDTSTART  UNION ALL SELECT '2026-04-01', 9EXTRACTDTEND
@@ -258,13 +258,13 @@ FROM d7_wlm_summary s;
 
 WITH peak_hours AS (
   /* ---------------------------------------------------------------------------
-     PEAK HOURS — April 2026 (2026-04-01 to 2026-04-30)
+     PEAK HOURS - April 2026 (2026-04-01 to 2026-04-30)
      Source: D7_PEAK_HOURS rows from A_1_full_report_A_looker_history_queries.sql.
 
      To use a different date range: re-run A_1_full_report_A_looker_history_queries.sql
      with the new date range, then replace the UNION ALL SELECT rows below with the
      col_4 values from the D7_PEAK_HOURS section of that report.
-     Keep the first SELECT row — it defines the column names.
+     Keep the first SELECT row - it defines the column names.
      Format: UNION ALL SELECT 'YYYY-MM-DD', HH
      --------------------------------------------------------------------------- */
   SELECT peak_date::DATE AS completed_date_pacific,
@@ -301,7 +301,7 @@ WITH peak_hours AS (
 ),
 
 /* =============================================================================
-   DIMENSION 7 — WLM QUEUE TIME COMMON TABLE EXPRESSIONS (CTEs)
+   DIMENSION 7 - WLM QUEUE TIME COMMON TABLE EXPRESSIONS (CTEs)
    Source: A_1_query8_redshift_wlm_queue_time.sql
 
    Pulls WLM queue and execution timing for Looker queries that ran during
