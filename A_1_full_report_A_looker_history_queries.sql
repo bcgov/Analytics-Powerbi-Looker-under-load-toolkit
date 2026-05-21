@@ -1208,7 +1208,7 @@ SELECT
   SUM(CASE WHEN o.runtime >= 0.9 * rp.max_runtime THEN 1 ELSE 0 END) AS col_5
 FROM d6_runtime_percentiles rp
 JOIN d6_peak_hour_queries o ON o.query_category = rp.query_category
-GROUP BY rp.query_category, rp.p95_runtime, rp.max_runtime;
+GROUP BY rp.query_category, rp.p95_runtime, rp.max_runtime
 
 
 /* =============================================================================
@@ -1221,7 +1221,33 @@ GROUP BY rp.query_category, rp.p95_runtime, rp.max_runtime;
    be factored into baseline latency expectations for the Power BI workload.
    ============================================================================= */
 
--- TODO: SQL placeholder (A_1_query8_redshift_wlm_queue_time.sql)
+/* D7 outputs peak hours so the companion Redshift file can be run.
+   WLM queue time query is in A_1_full_report_B_redshift_stl_queries.sql */
+
+UNION ALL
+
+/* --- DIMENSION 7: CONNECTION NOTE --- */
+SELECT
+  'D7_NOTE'                                                                            AS result_section,
+  'Run A_1_full_report_B_redshift_stl_queries.sql on connection: redshift_pacific_time'  AS key_value,
+  'Copy col_4 values directly into the peak_hours VALUES list in that file'           AS metric_value,
+  NULL                                                                                  AS col_4,
+  NULL                                                                                  AS col_5
+
+UNION ALL
+
+/* --- DIMENSION 7: PEAK HOURS HANDOFF
+   col_4 is pre-formatted as a VALUES entry — copy col_4 cells straight into
+   the peak_hours VALUES block in A_1_full_report_B_redshift_stl_queries.sql
+   --- */
+SELECT
+  'D7_PEAK_HOURS'                                                       AS result_section,
+  CAST(ph.completed_date_pacific AS CHAR)                               AS key_value,
+  ph.completed_hour_pacific                                              AS metric_value,
+  CONCAT('(''', CAST(ph.completed_date_pacific AS CHAR), ''', ',
+         ph.completed_hour_pacific, '),')                               AS col_4,
+  NULL                                                                   AS col_5
+FROM daily_peak_hours ph;
 
 
 /* =============================================================================
@@ -1235,7 +1261,10 @@ GROUP BY rp.query_category, rp.p95_runtime, rp.max_runtime;
    gateway sizing exercise.
    ============================================================================= */
 
--- TODO: SQL placeholder (A_1_query9_redshift_CPU_saturation.sql)
+-- NOTE: Dimensions 7 (WLM queue time) and 8 (CPU saturation) run on
+-- connection: redshift_pacific_time
+-- See: A_1_full_report_B_redshift_stl_queries.sql
+-- Use the D7_PEAK_HOURS rows above as input to that file.
 
 
 /* =============================================================================
