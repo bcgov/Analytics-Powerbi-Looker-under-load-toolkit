@@ -19,10 +19,12 @@
    - One peak hour per day (hour with max dashboard runtime)
    ============================================================================= */
 
-/* READ-ONLY QUERIES
+/* ************************************************************************* 
+  READ-ONLY QUERIES
 
    This SQL is strictly read*only. It only SELECTs and aggregates existing data
-   and does NOT insert, update, delete, or modify any database objects. */
+   and does NOT insert, update, delete, or modify any database objects. 
+   *************************************************************************** */
 
 /* *************************************************************************
    INPUT
@@ -97,7 +99,7 @@ WITH date_range AS (
 ),
 
 /* ***************************************************************************
-   D0.1 — DAYS WITH DATA IN RANGE (CTE)
+   D0.1 — DAYS WITH DATA IN RANGE COMMON TABLE EXPRESSION (CTE)
    *************************************************************************** */
 d0_days_data AS (
   SELECT
@@ -234,7 +236,7 @@ ranked_peaks AS (
 ),
 
 /* ***************************************************************************
-   DIMENSION 2 — QUERY RATE CTEs
+   DIMENSION 2 — QUERY RATE COMMON TABLE EXPRESSIONS (CTEs)
    Source: A_1_query3_looker_queries_rate.sql
    *************************************************************************** */
 
@@ -338,7 +340,7 @@ d2_base_metrics AS (
 ),
 
 /* ***************************************************************************
-   DIMENSION 3 — CONCURRENCY CTEs
+   DIMENSION 3 — CONCURRENCY COMMON TABLE EXPRESSIONS (CTEs)
    Source: A_1_query4_looker_queries_overlapping.sql
    *************************************************************************** */
 
@@ -479,7 +481,7 @@ d3_base_metrics AS (
 ),
 
 /* ***************************************************************************
-   DIMENSION 4 — FAN-OUT CTEs
+   DIMENSION 4 — FAN-OUT COMMON TABLE EXPRESSIONS (CTEs)
    Source: A_1_query5_fan-out.sql
    *************************************************************************** */
 
@@ -566,6 +568,98 @@ d4_fanout_metrics AS (
     ROUND(SUM(phdq.runtime), 2)                         AS total_runtime_seconds
   FROM d4_peak_hour_dashboard_queries phdq
   GROUP BY phdq.dashboard_id
+),
+
+/* ***************************************************************************
+   DIMENSION 5 — CACHING COMMON TABLE EXPRESSIONS (CTEs)
+   Source: A_1_query6_caching.sql
+   *************************************************************************** */
+
+d5_peak_hours AS (
+  SELECT
+    hourly.completed_date_pacific,
+    MIN(hourly.completed_hour_pacific) AS completed_hour_pacific
+  FROM (
+    SELECT
+      DATE(CONVERT_TZ(h.completed_at,'UTC','America/Vancouver'))
+        AS completed_date_pacific,
+      HOUR(CONVERT_TZ(h.completed_at,'UTC','America/Vancouver'))
+        AS completed_hour_pacific,
+      SUM(h.runtime) AS hourly_dashboard_runtime
+    FROM history h
+    JOIN date_range dr ON 1=1
+    WHERE CONVERT_TZ(h.completed_at,'UTC','America/Vancouver')
+          >= dr.analysis_range_first_day
+      AND CONVERT_TZ(h.completed_at,'UTC','America/Vancouver')
+          <  dr.analysis_range_last_day
+      AND h.dashboard_id IS NOT NULL
+      AND h.runtime IS NOT NULL
+    GROUP BY
+      completed_date_pacific,
+      completed_hour_pacific
+  ) hourly
+  JOIN (
+    SELECT
+      x.completed_date_pacific,
+      MAX(x.hourly_dashboard_runtime) AS max_runtime
+    FROM (
+      SELECT
+        DATE(CONVERT_TZ(h2.completed_at,'UTC','America/Vancouver'))
+          AS completed_date_pacific,
+        HOUR(CONVERT_TZ(h2.completed_at,'UTC','America/Vancouver'))
+          AS completed_hour_pacific,
+        SUM(h2.runtime) AS hourly_dashboard_runtime
+      FROM history h2
+      JOIN date_range dr2 ON 1=1
+      WHERE CONVERT_TZ(h2.completed_at,'UTC','America/Vancouver')
+            >= dr2.analysis_range_first_day
+        AND CONVERT_TZ(h2.completed_at,'UTC','America/Vancouver')
+            <  dr2.analysis_range_last_day
+        AND h2.dashboard_id IS NOT NULL
+        AND h2.runtime IS NOT NULL
+      GROUP BY
+        completed_date_pacific,
+        completed_hour_pacific
+    ) x
+    GROUP BY x.completed_date_pacific
+  ) mx
+    ON hourly.completed_date_pacific  = mx.completed_date_pacific
+   AND hourly.hourly_dashboard_runtime = mx.max_runtime
+  GROUP BY hourly.completed_date_pacific
+),
+
+d5_peak_hour_queries AS (
+  SELECT
+    CASE
+      WHEN h.dashboard_id IS NOT NULL THEN 'Dashboard-Only Queries'
+      ELSE 'Non-Dashboard Queries'
+    END AS query_category,
+    h.cache
+  FROM history h
+  JOIN d5_peak_hours ph
+    ON DATE(CONVERT_TZ(h.completed_at,'UTC','America/Vancouver'))
+       = ph.completed_date_pacific
+   AND HOUR(CONVERT_TZ(h.completed_at,'UTC','America/Vancouver'))
+       = ph.completed_hour_pacific
+  JOIN date_range dr ON 1=1
+  WHERE CONVERT_TZ(h.completed_at,'UTC','America/Vancouver')
+        >= dr.analysis_range_first_day
+    AND CONVERT_TZ(h.completed_at,'UTC','America/Vancouver')
+        <  dr.analysis_range_last_day
+),
+
+d5_cache_metrics AS (
+  SELECT
+    phq.query_category,
+    COUNT(*)                                                       AS total_queries,
+    SUM(CASE WHEN phq.cache = 'hit' THEN 1 ELSE 0 END)            AS cached_queries,
+    ROUND(
+      100.0 * SUM(CASE WHEN phq.cache = 'hit' THEN 1 ELSE 0 END)
+            / COUNT(*),
+      1
+    )                                                              AS cache_hit_percentage
+  FROM d5_peak_hour_queries phq
+  GROUP BY phq.query_category
 )
 
 /* ***************************************************************************
@@ -623,7 +717,7 @@ SELECT
 
 UNION ALL
 /* If this value is non-zero, some days had dashboard queries but were silently
-   dropped by the daily_peak_hours CTE. Known hypotheses:
+   dropped by the daily_peak_hours COMMON TABLE EXPRESSION (CTE). Known hypotheses:
    (a) Tie in hourly runtime across two or more hours on the same day — the
        MAX(hourly_dashboard_runtime) join matches multiple hours, and the
        GROUP BY / MIN(hour) may not resolve cleanly in all MySQL versions.
@@ -898,7 +992,7 @@ SELECT
   fm.queries_per_dashboard_session        AS metric_value,
   fm.dashboard_sessions_count             AS col_4,
   fm.total_runtime_seconds                AS col_5
-FROM d4_fanout_metrics fm;
+FROM d4_fanout_metrics fm
 
 
 /* =============================================================================
@@ -912,7 +1006,26 @@ FROM d4_fanout_metrics fm;
    sizing the Power BI gateway (which has no equivalent cache layer by default).
    ============================================================================= */
 
--- TODO: SQL placeholder (A_1_query6_caching.sql)
+UNION ALL
+
+/* --- DIMENSION 5: COLUMN HEADINGS --- */
+SELECT
+  'D5_COLUMN_HEADINGS'           AS result_section,
+  'query_category'               AS key_value,
+  'cache_hit_percentage'         AS metric_value,
+  'cached_queries'               AS col_4,
+  'total_queries'                AS col_5
+
+UNION ALL
+
+/* --- DIMENSION 5: CACHE DATA (peak hours only) --- */
+SELECT
+  'D5_CACHE'                     AS result_section,
+  cm.query_category              AS key_value,
+  cm.cache_hit_percentage        AS metric_value,
+  cm.cached_queries              AS col_4,
+  cm.total_queries               AS col_5
+FROM d5_cache_metrics cm;
 
 
 /* =============================================================================
@@ -963,13 +1076,13 @@ FROM d4_fanout_metrics fm;
    'Total daily peak hours analysed' in REPORT_METADATA.
 
    Copy and paste this standalone query into SQL Runner separately.
-   Edit the date range below to match the main query's date_range CTE.
+   Edit the date range below to match the main query's date_range COMMON TABLE EXPRESSION (CTE).
 
    COLUMNS
    missing_date              : The calendar date (Pacific) that was dropped
    hours_tied_for_max        : Number of hours that shared the same max runtime
                                on that day. If > 1, hypothesis (a) — a tie in
-                               hourly runtime prevented the CTE from resolving
+                               hourly runtime prevented the COMMON TABLE EXPRESSION (CTE) from resolving
                                a single peak hour cleanly.
    max_hourly_runtime_secs   : Total dashboard runtime in the busiest hour.
                                If 0 or very small, hypothesis (c) — zero-runtime
@@ -1013,7 +1126,7 @@ daily_max AS (
   GROUP BY completed_date_pacific
 ),
 
--- Reproduces the daily_peak_hours CTE logic from the main query exactly
+-- Reproduces the daily_peak_hours COMMON TABLE EXPRESSION (CTE) logic from the main query exactly
 daily_peak_hours AS (
   SELECT
     hr.completed_date_pacific,
