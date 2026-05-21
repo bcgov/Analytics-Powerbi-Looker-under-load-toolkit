@@ -660,6 +660,134 @@ d5_cache_metrics AS (
     )                                                              AS cache_hit_percentage
   FROM d5_peak_hour_queries phq
   GROUP BY phq.query_category
+),
+
+/* ***************************************************************************
+   DIMENSION 6 — QUERY SHAPE COMMON TABLE EXPRESSIONS (CTEs)
+   Source: A_1_query7_query_shape.sql
+   *************************************************************************** */
+
+d6_peak_hours AS (
+  SELECT
+    hourly.completed_date_pacific,
+    MIN(hourly.completed_hour_pacific) AS completed_hour_pacific
+  FROM (
+    SELECT
+      DATE(CONVERT_TZ(h.completed_at,'UTC','America/Vancouver'))
+        AS completed_date_pacific,
+      HOUR(CONVERT_TZ(h.completed_at,'UTC','America/Vancouver'))
+        AS completed_hour_pacific,
+      SUM(h.runtime) AS hourly_dashboard_runtime
+    FROM history h
+    JOIN date_range dr ON 1=1
+    WHERE CONVERT_TZ(h.completed_at,'UTC','America/Vancouver')
+          >= dr.analysis_range_first_day
+      AND CONVERT_TZ(h.completed_at,'UTC','America/Vancouver')
+          <  dr.analysis_range_last_day
+      AND h.dashboard_id IS NOT NULL
+      AND h.runtime IS NOT NULL
+    GROUP BY
+      completed_date_pacific,
+      completed_hour_pacific
+  ) hourly
+  JOIN (
+    SELECT
+      x.completed_date_pacific,
+      MAX(x.hourly_dashboard_runtime) AS max_runtime
+    FROM (
+      SELECT
+        DATE(CONVERT_TZ(h2.completed_at,'UTC','America/Vancouver'))
+          AS completed_date_pacific,
+        HOUR(CONVERT_TZ(h2.completed_at,'UTC','America/Vancouver'))
+          AS completed_hour_pacific,
+        SUM(h2.runtime) AS hourly_dashboard_runtime
+      FROM history h2
+      JOIN date_range dr2 ON 1=1
+      WHERE CONVERT_TZ(h2.completed_at,'UTC','America/Vancouver')
+            >= dr2.analysis_range_first_day
+        AND CONVERT_TZ(h2.completed_at,'UTC','America/Vancouver')
+            <  dr2.analysis_range_last_day
+        AND h2.dashboard_id IS NOT NULL
+        AND h2.runtime IS NOT NULL
+      GROUP BY
+        completed_date_pacific,
+        completed_hour_pacific
+    ) x
+    GROUP BY x.completed_date_pacific
+  ) mx
+    ON hourly.completed_date_pacific  = mx.completed_date_pacific
+   AND hourly.hourly_dashboard_runtime = mx.max_runtime
+  GROUP BY hourly.completed_date_pacific
+),
+
+d6_peak_hour_queries AS (
+  SELECT
+    CASE
+      WHEN h.dashboard_id IS NOT NULL THEN 'Dashboard-Only Queries'
+      ELSE 'Non-Dashboard Queries'
+    END AS query_category,
+    h.runtime
+  FROM history h
+  JOIN d6_peak_hours ph
+    ON DATE(CONVERT_TZ(h.completed_at,'UTC','America/Vancouver'))
+       = ph.completed_date_pacific
+   AND HOUR(CONVERT_TZ(h.completed_at,'UTC','America/Vancouver'))
+       = ph.completed_hour_pacific
+  JOIN date_range dr ON 1=1
+  WHERE h.runtime IS NOT NULL
+    AND CONVERT_TZ(h.completed_at,'UTC','America/Vancouver')
+        >= dr.analysis_range_first_day
+    AND CONVERT_TZ(h.completed_at,'UTC','America/Vancouver')
+        <  dr.analysis_range_last_day
+),
+
+d6_runtime_base AS (
+  SELECT
+    query_category,
+    COUNT(*)        AS total_queries,
+    MAX(runtime)    AS max_runtime
+  FROM d6_peak_hour_queries
+  GROUP BY query_category
+),
+
+d6_runtime_percentiles AS (
+  SELECT
+    bm.query_category,
+    bm.total_queries,
+    bm.max_runtime,
+    (
+      SELECT r.runtime
+      FROM (
+        SELECT o.runtime, @d6r50 := @d6r50 + 1 AS rn
+        FROM (
+          SELECT runtime
+          FROM d6_peak_hour_queries
+          WHERE query_category = bm.query_category
+          ORDER BY runtime
+        ) o
+        CROSS JOIN (SELECT @d6r50 := 0) z
+      ) r
+      WHERE r.rn >= CEIL(0.50 * bm.total_queries)
+      ORDER BY r.rn
+      LIMIT 1
+    ) AS p50_runtime,
+    (
+      SELECT r.runtime
+      FROM (
+        SELECT o.runtime, @d6r95 := @d6r95 + 1 AS rn
+        FROM (
+          SELECT runtime
+          FROM d6_peak_hour_queries
+          WHERE query_category = bm.query_category
+          ORDER BY runtime
+        ) o
+        CROSS JOIN (SELECT @d6r95 := 0) z
+      ) r
+      WHERE r.rn >= CEIL(0.95 * bm.total_queries)
+      ORDER BY r.rn
+      LIMIT 1
+    ) AS p95_runtime
+  FROM d6_runtime_base bm
 )
 
 /* ***************************************************************************
@@ -1025,7 +1153,7 @@ SELECT
   cm.cache_hit_percentage        AS metric_value,
   cm.cached_queries              AS col_4,
   cm.total_queries               AS col_5
-FROM d5_cache_metrics cm;
+FROM d5_cache_metrics cm
 
 
 /* =============================================================================
@@ -1038,7 +1166,49 @@ FROM d5_cache_metrics cm;
    DAX query templates in Phase C of the load-test plan.
    ============================================================================= */
 
--- TODO: SQL placeholder (A_1_query7_query_shape.sql)
+UNION ALL
+
+/* --- DIMENSION 6: COLUMN HEADINGS (D6_QUERY_SHAPE rows) --- */
+SELECT
+  'D6_COLUMN_HEADINGS'           AS result_section,
+  'query_category'               AS key_value,
+  'p50_runtime_seconds'          AS metric_value,
+  'p95_runtime_seconds'          AS col_4,
+  'max_runtime_seconds'          AS col_5
+
+UNION ALL
+
+/* --- DIMENSION 6: TAIL HEADINGS (D6_QUERY_SHAPE_TAIL rows) --- */
+SELECT
+  'D6_TAIL_HEADINGS'             AS result_section,
+  'query_category'               AS key_value,
+  'queries_gte_30s'              AS metric_value,
+  'queries_gte_p95'              AS col_4,
+  'queries_within_10pct_of_max'  AS col_5
+
+UNION ALL
+
+/* --- DIMENSION 6: RUNTIME PERCENTILES (peak hours only) --- */
+SELECT
+  'D6_QUERY_SHAPE'               AS result_section,
+  rp.query_category              AS key_value,
+  ROUND(rp.p50_runtime, 1)       AS metric_value,
+  ROUND(rp.p95_runtime, 1)       AS col_4,
+  ROUND(rp.max_runtime, 1)       AS col_5
+FROM d6_runtime_percentiles rp
+
+UNION ALL
+
+/* --- DIMENSION 6: TAIL DIAGNOSTICS (peak hours only) --- */
+SELECT
+  'D6_QUERY_SHAPE_TAIL'                                              AS result_section,
+  rp.query_category                                                  AS key_value,
+  SUM(CASE WHEN o.runtime >= 30              THEN 1 ELSE 0 END)      AS metric_value,
+  SUM(CASE WHEN o.runtime >= rp.p95_runtime  THEN 1 ELSE 0 END)      AS col_4,
+  SUM(CASE WHEN o.runtime >= 0.9 * rp.max_runtime THEN 1 ELSE 0 END) AS col_5
+FROM d6_runtime_percentiles rp
+JOIN d6_peak_hour_queries o ON o.query_category = rp.query_category
+GROUP BY rp.query_category, rp.p95_runtime, rp.max_runtime;
 
 
 /* =============================================================================
