@@ -84,13 +84,62 @@ LIMIT 20;
 
 
 /* ---------------------------------------------------------------------------
-   CHECK 7: Sample querytxt from the highest-volume userid
-   Replace <userid> with the top userid from CHECK 6.
+   CHECK 7: Does SVL_QLOG exist and does it have older data?
+   svl_qlog is a view that sometimes retains more history than stl_query.
    --------------------------------------------------------------------------- */
--- SELECT LEFT(querytxt, 200) AS sample, starttime
--- FROM stl_query
--- WHERE userid = <userid>
---   AND starttime >= '2026-04-01'
---   AND starttime <  '2026-05-01'
--- ORDER BY starttime DESC
--- LIMIT 10;
+SELECT
+  COUNT(*)          AS total_rows,
+  MIN(starttime)    AS earliest,
+  MAX(starttime)    AS latest
+FROM svl_qlog;
+
+
+/* ---------------------------------------------------------------------------
+   CHECK 8: Does SYS_QUERY_HISTORY exist?
+   Available on RA3 / Redshift Serverless clusters — retains up to 35 days.
+   --------------------------------------------------------------------------- */
+SELECT
+  COUNT(*)          AS total_rows,
+  MIN(start_time)   AS earliest,
+  MAX(start_time)   AS latest
+FROM sys_query_history;
+
+
+/* ---------------------------------------------------------------------------
+   CHECK 9: Is there an admin schema with audit/query log tables?
+   Common pattern: DBAs create a persistent query log via unload + reload.
+   --------------------------------------------------------------------------- */
+SELECT
+  table_schema,
+  table_name,
+  table_type
+FROM information_schema.tables
+WHERE LOWER(table_name) LIKE '%query%'
+   OR LOWER(table_name) LIKE '%audit%'
+   OR LOWER(table_name) LIKE '%log%'
+ORDER BY table_schema, table_name;
+
+
+/* ---------------------------------------------------------------------------
+   CHECK 10: Any tables in the public / admin / reporting schemas worth noting?
+   --------------------------------------------------------------------------- */
+SELECT
+  table_schema,
+  table_name
+FROM information_schema.tables
+WHERE table_schema NOT IN ('information_schema', 'pg_catalog', 'pg_internal')
+  AND table_type = 'BASE TABLE'
+ORDER BY table_schema, table_name
+LIMIT 50;
+
+
+/* ---------------------------------------------------------------------------
+   CHECK 11: Does pg_catalog.stl_query differ from atomic.stl_query?
+   Some clusters alias differently; check earliest row via catalog directly.
+   --------------------------------------------------------------------------- */
+SELECT
+  COUNT(*)          AS total_rows,
+  MIN(starttime)    AS earliest,
+  MAX(starttime)    AS latest
+FROM pg_catalog.stl_query;
+
