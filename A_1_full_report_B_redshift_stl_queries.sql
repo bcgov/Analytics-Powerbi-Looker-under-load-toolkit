@@ -39,16 +39,18 @@
    username, set looker_username below to restrict peak-hour detection to
    Looker traffic only. Leave as NULL to use all queries.
 
-   To find the Looker username run:
-     SELECT usename, usesysid FROM pg_user ORDER BY usename;
+   To find the Looker userid run:
+     SELECT usesysid, usename FROM pg_user ORDER BY usename;
    and look for a service-account name (e.g. 'looker', 'svc_looker').
+   Set looker_userid to that integer value to restrict peak-hour detection
+   to Looker traffic only. Leave as NULL to use all queries.
    --------------------------------------------------------------------------- */
 
 WITH config AS (
   SELECT
     DATEADD(day, -7, TRUNC(GETDATE()))  AS analysis_start,
     TRUNC(GETDATE())                     AS analysis_end,
-    NULL::VARCHAR                        AS looker_username   -- set e.g. 'looker' to filter by user
+    NULL::INTEGER                        AS looker_userid   -- set e.g. 42 to filter by Looker service account
 ),
 
 /* =============================================================================
@@ -68,7 +70,7 @@ hourly_load AS (
   WHERE q.starttime >= c.analysis_start
     AND q.starttime <  c.analysis_end
     AND q.endtime IS NOT NULL
-    AND (c.looker_username IS NULL OR q.usename = c.looker_username)
+    AND (c.looker_userid IS NULL OR q.userid = c.looker_userid)
   GROUP BY 1, 2
 ),
 
