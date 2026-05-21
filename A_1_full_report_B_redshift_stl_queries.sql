@@ -187,6 +187,9 @@ d8_cpu_summary AS (
    result_section | key_value | metric_value | col_4 | col_5
    ============================================================================= */
 
+SELECT result_section, key_value, metric_value, col_4, col_5
+FROM (
+
 /* --- REPORT METADATA --- */
 SELECT
   'REPORT_METADATA'                                          AS result_section,
@@ -268,6 +271,8 @@ SELECT
   CAST(s.avg_exec_time_seconds AS VARCHAR)                   AS col_4,
   CAST(s.avg_queue_time_seconds AS VARCHAR)                  AS col_5
 FROM d8_cpu_summary s
+
+) sub
 ORDER BY
   CASE result_section
     WHEN 'REPORT_METADATA'    THEN 1
