@@ -1213,74 +1213,41 @@ GROUP BY rp.query_category, rp.p95_runtime, rp.max_runtime
 
 /* =============================================================================
    DIMENSION 7. REDSHIFT WLM QUEUE TIME
-   Source: A_1_query8_redshift_wlm_queue_time.sql
 
    PURPOSE
    Measures time queries spend waiting in Redshift WLM queues during peak
    hours. High queue time indicates Redshift is already a bottleneck and must
    be factored into baseline latency expectations for the Power BI workload.
+
+   ⚠  Redshift STL tables retain ~7 days of history only.
+   Run A_1_full_report_B_redshift_stl_queries.sql on connection
+   redshift_pacific_time / schema atomic promptly after a load event.
+   That file is self-contained — it detects its own peak hours from the
+   last 7 days of stl_query data. No input from this report is required.
    ============================================================================= */
 
-/* D7 outputs peak hours so the companion Redshift file can be run.
-   WLM queue time query is in A_1_full_report_B_redshift_stl_queries.sql */
-
 UNION ALL
 
-/* --- DIMENSION 7: CONNECTION NOTE --- */
+/* --- DIMENSION 7: NOTE --- */
 SELECT
-  'D7_NOTE'                                                                            AS result_section,
-  'Run A_1_full_report_B_redshift_stl_queries.sql on connection: redshift_pacific_time'  AS key_value,
-  'Use terminal script in D7 comment to extract col_4 values into that file' AS metric_value,
-  NULL                                                                                  AS col_4,
-  NULL                                                                                  AS col_5
-
-UNION ALL
-
-/* --- DIMENSION 7: PEAK HOURS HANDOFF
-   col_4 contains each peak hour as a pre-formatted UNION ALL SELECT entry,
-   wrapped in EXTRACTDTSTART...EXTRACTDTEND markers so a terminal script can
-   pull the list directly from a saved or pasted copy of this report.
-
-   STEP 1 — Export or copy this report output (CSV or plain text).
-
-   STEP 2 — Run one of these terminal commands to extract the UNION ALL list:
-
-   Option A: from a CSV export (replace filename as needed)
-     grep -oP '(?<=EXTRACTDTSTART).*?(?=EXTRACTDTEND)' report_output.csv
-
-   Option B: copy the col_4 column to clipboard, then run (macOS)
-     pbpaste | grep -oP '(?<=EXTRACTDTSTART).*?(?=EXTRACTDTEND)'
-
-   STEP 3 — In A_1_full_report_B_redshift_stl_queries.sql, replace the
-            existing UNION ALL SELECT rows in the peak_hours CTE with the
-            terminal output. Keep the first SELECT row — it defines column names.
-   --- */
-SELECT
-  'D7_PEAK_HOURS'                                                       AS result_section,
-  CAST(ph.completed_date_pacific AS CHAR)                               AS key_value,
-  ph.peak_hour_pacific                                                   AS metric_value,
-  CONCAT('EXTRACTDTSTART  UNION ALL SELECT ''',
-         CAST(ph.completed_date_pacific AS CHAR),
-         ''', ', ph.peak_hour_pacific, 'EXTRACTDTEND')                 AS col_4,
-  NULL                                                                   AS col_5
-FROM daily_peak_hours ph;
+  'D7_NOTE'                                                                       AS result_section,
+  'Run A_1_full_report_B_redshift_stl_queries.sql separately'                     AS key_value,
+  'Connection: redshift_pacific_time  |  Schema: atomic  |  Run within 7 days of load event' AS metric_value,
+  NULL                                                                             AS col_4,
+  NULL                                                                             AS col_5;
 
 
 /* =============================================================================
    DIMENSION 8. REDSHIFT CPU SATURATION
-   Source: A_1_query9_redshift_CPU_saturation.sql
 
    PURPOSE
    Measures Redshift CPU utilisation during peak dashboard hours. Establishes
    the headroom (or lack thereof) available to absorb the Power BI workload
    and informs whether a Redshift scaling change is needed alongside the
    gateway sizing exercise.
-   ============================================================================= */
 
--- NOTE: Dimensions 7 (WLM queue time) and 8 (CPU saturation) run on
--- connection: redshift_pacific_time
--- See: A_1_full_report_B_redshift_stl_queries.sql
--- Use the D7_PEAK_HOURS rows above as input to that file.
+   See A_1_full_report_B_redshift_stl_queries.sql (same file, same connection).
+   ============================================================================= */
 
 
 /* =============================================================================
