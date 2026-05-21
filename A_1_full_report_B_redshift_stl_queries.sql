@@ -3,7 +3,8 @@
    Companion to: A_1_full_report_A_looker_history_queries.sql
 
    CONNECTION: redshift_pacific_time
-   Run in SQL Runner on the redshift_pacific_time connection.
+   SCHEMA:     atomic   (stl_query and stl_wlm_query live here)
+   Run in SQL Runner on the redshift_pacific_time connection with schema set to atomic.
 
    PURPOSE
    Covers the Redshift-side dimensions of the stress profile that cannot be
@@ -32,11 +33,12 @@
    INPUT — STEP 2: PASTE PEAK HOURS FROM LOOKER REPORT
    Run A_1_full_report_A_looker_history_queries.sql first.
    In the D7_PEAK_HOURS output rows, col_4 is already formatted as a
-   VALUES entry. Copy the col_4 cells and paste them into the VALUES list
-   in the peak_hours CTE below. Remove the trailing comma from the last row.
+   UNION ALL SELECT entry. Use the terminal script in the D7 comment of that
+   file to extract the list, then replace the UNION ALL SELECT rows in the
+   peak_hours CTE below (keep the first SELECT row — it sets column names).
 
    Example col_4 value from Looker report:
-     ('2026-04-01', 11),
+     EXTRACTDTSTART  UNION ALL SELECT '2026-04-01', 9EXTRACTDTEND
    --------------------------------------------------------------------------- */
 
 WITH peak_hours AS (
@@ -45,42 +47,42 @@ WITH peak_hours AS (
      Source: D7_PEAK_HOURS rows from A_1_full_report_A_looker_history_queries.sql.
 
      To use a different date range: re-run A_1_full_report_A_looker_history_queries.sql
-     with the new date range, then replace the VALUES rows below with the col_4
-     values from the D7_PEAK_HOURS section of that report.
-     Format: ('YYYY-MM-DD', HH)
+     with the new date range, then replace the UNION ALL SELECT rows below with the
+     col_4 values from the D7_PEAK_HOURS section of that report.
+     Keep the first SELECT row — it defines the column names.
+     Format: UNION ALL SELECT 'YYYY-MM-DD', HH
      --------------------------------------------------------------------------- */
   SELECT peak_date::DATE AS completed_date_pacific,
          peak_hour       AS completed_hour_pacific
   FROM (
-    VALUES
-      ('2026-04-01', 9),
-      ('2026-04-02', 11),
-      ('2026-04-03', 6),
-      ('2026-04-04', 6),
-      ('2026-04-05', 4),
-      ('2026-04-06', 14),
-      ('2026-04-07', 9),
-      ('2026-04-08', 8),
-      ('2026-04-09', 9),
-      ('2026-04-10', 14),
-      ('2026-04-11', 6),
-      ('2026-04-12', 4),
-      ('2026-04-13', 14),
-      ('2026-04-14', 16),
-      ('2026-04-15', 11),
-      ('2026-04-16', 11),
-      ('2026-04-17', 10),
-      ('2026-04-19', 15),
-      ('2026-04-20', 14),
-      ('2026-04-21', 14),
-      ('2026-04-22', 13),
-      ('2026-04-23', 11),
-      ('2026-04-24', 11),
-      ('2026-04-26', 23),
-      ('2026-04-27', 11),
-      ('2026-04-28', 9),
-      ('2026-04-29', 8)
-  ) ph(peak_date, peak_hour)
+    SELECT '2026-04-01' AS peak_date,  9 AS peak_hour
+    UNION ALL SELECT '2026-04-02', 11
+    UNION ALL SELECT '2026-04-03',  6
+    UNION ALL SELECT '2026-04-04',  6
+    UNION ALL SELECT '2026-04-05',  4
+    UNION ALL SELECT '2026-04-06', 14
+    UNION ALL SELECT '2026-04-07',  9
+    UNION ALL SELECT '2026-04-08',  8
+    UNION ALL SELECT '2026-04-09',  9
+    UNION ALL SELECT '2026-04-10', 14
+    UNION ALL SELECT '2026-04-11',  6
+    UNION ALL SELECT '2026-04-12',  4
+    UNION ALL SELECT '2026-04-13', 14
+    UNION ALL SELECT '2026-04-14', 16
+    UNION ALL SELECT '2026-04-15', 11
+    UNION ALL SELECT '2026-04-16', 11
+    UNION ALL SELECT '2026-04-17', 10
+    UNION ALL SELECT '2026-04-19', 15
+    UNION ALL SELECT '2026-04-20', 14
+    UNION ALL SELECT '2026-04-21', 14
+    UNION ALL SELECT '2026-04-22', 13
+    UNION ALL SELECT '2026-04-23', 11
+    UNION ALL SELECT '2026-04-24', 11
+    UNION ALL SELECT '2026-04-26', 23
+    UNION ALL SELECT '2026-04-27', 11
+    UNION ALL SELECT '2026-04-28',  9
+    UNION ALL SELECT '2026-04-29',  8
+  ) t
 ),
 
 /* =============================================================================

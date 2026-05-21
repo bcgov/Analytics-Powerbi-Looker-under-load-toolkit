@@ -1237,33 +1237,31 @@ SELECT
 UNION ALL
 
 /* --- DIMENSION 7: PEAK HOURS HANDOFF
-   col_4 contains each peak hour as a pre-formatted VALUES entry, wrapped in
-   EXTRACTDTSTART...EXTRACTDTEND markers so a terminal script can pull the
-   list directly from a saved or pasted copy of this report.
+   col_4 contains each peak hour as a pre-formatted UNION ALL SELECT entry,
+   wrapped in EXTRACTDTSTART...EXTRACTDTEND markers so a terminal script can
+   pull the list directly from a saved or pasted copy of this report.
 
    STEP 1 — Export or copy this report output (CSV or plain text).
 
-   STEP 2 — Run one of these terminal commands to extract the VALUES list:
+   STEP 2 — Run one of these terminal commands to extract the UNION ALL list:
 
    Option A: from a CSV export (replace filename as needed)
-     grep -oP '(?<=EXTRACTDTSTART).*?(?=EXTRACTDTEND)' report_output.csv \
-       | sed '$ s/,$//'
+     grep -oP '(?<=EXTRACTDTSTART).*?(?=EXTRACTDTEND)' report_output.csv
 
    Option B: copy the col_4 column to clipboard, then run (macOS)
-     pbpaste | grep -oP '(?<=EXTRACTDTSTART).*?(?=EXTRACTDTEND)' \
-       | sed '$ s/,$//'
+     pbpaste | grep -oP '(?<=EXTRACTDTSTART).*?(?=EXTRACTDTEND)'
 
-   STEP 3 — Paste the terminal output into the VALUES block in
-            A_1_full_report_B_redshift_stl_queries.sql.
-
-   The last row will have its trailing comma stripped automatically.
+   STEP 3 — In A_1_full_report_B_redshift_stl_queries.sql, replace the
+            existing UNION ALL SELECT rows in the peak_hours CTE with the
+            terminal output. Keep the first SELECT row — it defines column names.
    --- */
 SELECT
   'D7_PEAK_HOURS'                                                       AS result_section,
   CAST(ph.completed_date_pacific AS CHAR)                               AS key_value,
   ph.peak_hour_pacific                                                   AS metric_value,
-  CONCAT('EXTRACTDTSTART(''', CAST(ph.completed_date_pacific AS CHAR),
-         ''', ', ph.peak_hour_pacific, '),EXTRACTDTEND')               AS col_4,
+  CONCAT('EXTRACTDTSTART  UNION ALL SELECT ''',
+         CAST(ph.completed_date_pacific AS CHAR),
+         ''', ', ph.peak_hour_pacific, 'EXTRACTDTEND')                 AS col_4,
   NULL                                                                   AS col_5
 FROM daily_peak_hours ph;
 
