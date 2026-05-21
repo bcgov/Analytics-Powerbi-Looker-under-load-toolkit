@@ -1219,7 +1219,7 @@ GROUP BY rp.query_category, rp.p95_runtime, rp.max_runtime
    hours. High queue time indicates Redshift is already a bottleneck and must
    be factored into baseline latency expectations for the Power BI workload.
 
-   !! STL tables retain ~7 days of history only !!
+   *** STL tables retain ~7 days of history only ***
    Run A_1_full_report_B_redshift_stl_queries.sql on connection
    redshift_pacific_time / schema atomic promptly after a load event.
    That file is self-contained — it detects its own peak hours from the

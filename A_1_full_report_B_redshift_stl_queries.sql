@@ -6,7 +6,7 @@
    SCHEMA:     atomic   (stl_query and stl_wlm_query live here)
    Run in SQL Runner on the redshift_pacific_time connection with schema set to atomic.
 
-   !! STL RETENTION WARNING !!
+   *** STL RETENTION WARNING ***
    Redshift STL tables (stl_query, stl_wlm_query) retain approximately 7 days
    of history. This report is SELF-CONTAINED and analyses the last 7 days
    automatically - no input from A_1_full_report_A_looker_history_queries.sql
