@@ -275,8 +275,30 @@ WITH target_slugs AS (
        ('1a2b3c4d5e6f1a2b3c4d5e6f1a2b3c4d', 120)
      ------------------------------------------------------------------- */
   SELECT slug, dashboard_id FROM (VALUES
-    ('REPLACE_ME_slug_1', 13),
-    ('REPLACE_ME_slug_2', 71)
+    -- Dashboard 13 (top 5 slowest renders, 180-269s end-to-end)
+    ('bdbb0f5c6dd34ca3ccf8b4a707c8a768', 13),
+    ('108598c1f8d823ccd82c1ca26652c29e', 13),
+    ('9b41fd7785b36610a41c576e4a862f45', 13),
+    ('01e7d387f4f6634194cd6c756e1ee1f5', 13),
+    ('122466c299ecb4f4956a7e488c95d9e6', 13),
+    -- Dashboard 71 (top 5 slowest renders, 46-57s end-to-end)
+    ('2956fc7c50c6d4486a0aa77ec924d8b8', 71),
+    ('ea9e65869847d0a375da91a23020f5dc', 71),
+    ('a26622a47c1632d9df5a033a62266109', 71),
+    ('6594735579652f087806f7ceaeebc2ff', 71),
+    ('5dbc45ed30c9c52aed0f4bad0bfe3962', 71),
+    -- Dashboard 103 (top 5 slowest renders, 501-551s end-to-end)
+    ('764d191a823965d214ebd43d97f15caf', 103),
+    ('350e602872d7da677a3ba3ba3a214d67', 103),
+    ('5b79153f7a5878b58120324623e513e9', 103),
+    ('b00764c3e67bde7690c07c74b4d10624', 103),
+    ('ab7ec344805f0e7bcc671682e4fc69d1', 103),
+    -- Dashboard 120 (top 5 slowest renders, 56-96s end-to-end)
+    ('acf4f2cbaa6895d4577ee4afe9bc493d', 120),
+    ('b603815ee81c60e4d212837ae22dc55a', 120),
+    ('40c1e30d45f29662ec5883e29d526a16', 120),
+    ('aff9b8a8fe33d4960316cce71f7cb951', 120),
+    ('9b5040a4749116c99123400579ddb3b8', 120)
   ) AS t(slug, dashboard_id)
 ),
 
