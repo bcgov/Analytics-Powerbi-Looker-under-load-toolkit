@@ -266,40 +266,34 @@ ORDER BY dashboard_id, runtime_seconds DESC;
 WITH target_slugs AS (
   /* -------------------------------------------------------------------
      PASTE SLUGS HERE
-     Replace the two placeholder rows below with real values from Part 2.
-     One row per slug. Add or remove rows as needed.
-     Example rows:
-       ('e2efad2aa12bde310f53456cd1668a32', 13),
-       ('a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4', 71),
-       ('f9e8d7c6b5a4f9e8d7c6b5a4f9e8d7c6', 103),
-       ('1a2b3c4d5e6f1a2b3c4d5e6f1a2b3c4d', 120)
+     Replace or add UNION ALL SELECT rows below with real values from Part 2.
+     One row per slug. Redshift does not support VALUES(...) AS t(col, col)
+     syntax reliably, so UNION ALL SELECT is used instead.
      ------------------------------------------------------------------- */
-  SELECT slug, dashboard_id FROM (VALUES
-    -- Dashboard 13 (top 5 slowest renders, 180-269s end-to-end)
-    ('bdbb0f5c6dd34ca3ccf8b4a707c8a768', 13),
-    ('108598c1f8d823ccd82c1ca26652c29e', 13),
-    ('9b41fd7785b36610a41c576e4a862f45', 13),
-    ('01e7d387f4f6634194cd6c756e1ee1f5', 13),
-    ('122466c299ecb4f4956a7e488c95d9e6', 13),
-    -- Dashboard 71 (top 5 slowest renders, 46-57s end-to-end)
-    ('2956fc7c50c6d4486a0aa77ec924d8b8', 71),
-    ('ea9e65869847d0a375da91a23020f5dc', 71),
-    ('a26622a47c1632d9df5a033a62266109', 71),
-    ('6594735579652f087806f7ceaeebc2ff', 71),
-    ('5dbc45ed30c9c52aed0f4bad0bfe3962', 71),
-    -- Dashboard 103 (top 5 slowest renders, 501-551s end-to-end)
-    ('764d191a823965d214ebd43d97f15caf', 103),
-    ('350e602872d7da677a3ba3ba3a214d67', 103),
-    ('5b79153f7a5878b58120324623e513e9', 103),
-    ('b00764c3e67bde7690c07c74b4d10624', 103),
-    ('ab7ec344805f0e7bcc671682e4fc69d1', 103),
-    -- Dashboard 120 (top 5 slowest renders, 56-96s end-to-end)
-    ('acf4f2cbaa6895d4577ee4afe9bc493d', 120),
-    ('b603815ee81c60e4d212837ae22dc55a', 120),
-    ('40c1e30d45f29662ec5883e29d526a16', 120),
-    ('aff9b8a8fe33d4960316cce71f7cb951', 120),
-    ('9b5040a4749116c99123400579ddb3b8', 120)
-  ) AS t(slug, dashboard_id)
+  -- Dashboard 13 (top 5 slowest renders, 180-269s end-to-end)
+  SELECT 'bdbb0f5c6dd34ca3ccf8b4a707c8a768' AS slug, 13 AS dashboard_id
+  UNION ALL SELECT '108598c1f8d823ccd82c1ca26652c29e', 13
+  UNION ALL SELECT '9b41fd7785b36610a41c576e4a862f45', 13
+  UNION ALL SELECT '01e7d387f4f6634194cd6c756e1ee1f5', 13
+  UNION ALL SELECT '122466c299ecb4f4956a7e488c95d9e6', 13
+  -- Dashboard 71 (top 5 slowest renders, 46-57s end-to-end)
+  UNION ALL SELECT '2956fc7c50c6d4486a0aa77ec924d8b8', 71
+  UNION ALL SELECT 'ea9e65869847d0a375da91a23020f5dc', 71
+  UNION ALL SELECT 'a26622a47c1632d9df5a033a62266109', 71
+  UNION ALL SELECT '6594735579652f087806f7ceaeebc2ff', 71
+  UNION ALL SELECT '5dbc45ed30c9c52aed0f4bad0bfe3962', 71
+  -- Dashboard 103 (top 5 slowest renders, 501-551s end-to-end)
+  UNION ALL SELECT '764d191a823965d214ebd43d97f15caf', 103
+  UNION ALL SELECT '350e602872d7da677a3ba3ba3a214d67', 103
+  UNION ALL SELECT '5b79153f7a5878b58120324623e513e9', 103
+  UNION ALL SELECT 'b00764c3e67bde7690c07c74b4d10624', 103
+  UNION ALL SELECT 'ab7ec344805f0e7bcc671682e4fc69d1', 103
+  -- Dashboard 120 (top 5 slowest renders, 56-96s end-to-end)
+  UNION ALL SELECT 'acf4f2cbaa6895d4577ee4afe9bc493d', 120
+  UNION ALL SELECT 'b603815ee81c60e4d212837ae22dc55a', 120
+  UNION ALL SELECT '40c1e30d45f29662ec5883e29d526a16', 120
+  UNION ALL SELECT 'aff9b8a8fe33d4960316cce71f7cb951', 120
+  UNION ALL SELECT '9b5040a4749116c99123400579ddb3b8', 120
 ),
 
 config AS (
