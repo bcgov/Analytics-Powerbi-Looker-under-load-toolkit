@@ -2,9 +2,11 @@
    TITLE (READ-ONLY): Looker Under-Load Stress Profile - Looker SQL Patterns
    Part C of the stress profile toolkit.
 
-   CONNECTION: redshift_pacific_time
-   SCHEMA:     atomic   (stl_query and stl_querytext live here)
-   Run in SQL Runner on the redshift_pacific_time connection with schema set to atomic.
+   CONNECTIONS USED IN THIS FILE
+     Part 1 -- redshift_pacific_time  (schema: atomic)
+     Part 2 -- looker_mysql_direct    (schema: looker)
+     Part 3 -- redshift_pacific_time  (schema: atomic)
+   Switch connections in SQL Runner before running each part.
 
    *** STL RETENTION WARNING ***
    Redshift STL tables retain approximately 7 days of history.
@@ -22,23 +24,33 @@
      Tier 3 - Heavy  (>30s)  : ~10% of firings  (tail queries, WLM stress)
 
    HOW TO USE THIS FILE
-   This file has two parts. Run each block separately in SQL Runner by
-   highlighting the desired block and clicking Run.
+   This file has three parts. Run each block separately in SQL Runner by
+   highlighting the desired block and clicking Run. Note the connection switch
+   between parts -- Part 2 runs on a different connection than Parts 1 and 3.
 
-     PART 1 -- TIER SUMMARY
-       Metadata and query-count breakdown by tier.
-       Use this to confirm the tier distribution before pulling full SQL.
+     PART 1 -- TIER SUMMARY                     (redshift_pacific_time)
+       Overall query-count breakdown by runtime tier across all Looker
+       traffic in the last 7 days. Confirms the production firing mix
+       (e.g. 85% Tier 1 / 9% Tier 2 / 6% Tier 3) to calibrate the DAX
+       load test schedule.
 
-     PART 2 -- QUERY DETAIL
-       Top 5 slowest queries per tier with reconstructed SQL text.
-       Use this to identify base tables, join complexity, and filter patterns
-       for writing equivalent DAX measures.
+     PART 2 -- GET HISTORY SLUGS FOR 4 DASHBOARDS  (looker_mysql_direct)
+       Queries the Looker MySQL history table to get the top 5 slowest
+       history entries per dashboard for dashboards 13, 71, 103, and 120.
+       Output: (dashboard_id, history_slug, runtime_seconds).
+       Copy these slug values and paste them into Part 3.
+
+     PART 3 -- DASHBOARD SELECT QUERIES BY SLUG    (redshift_pacific_time)
+       Uses the slugs from Part 2 to retrieve the actual SELECT statements
+       those 4 dashboards fired at Redshift. PDT rebuilds (INSERT INTO) are
+       excluded. Output includes reconstructed SQL for DAX template design.
 
    NOTE ON LOOKER QUERY IDENTIFICATION
    Looker prepends a context comment to every query it sends to Redshift:
-     -- Looker Query Context {"user_id":..., "history_id":...}
-   This file filters on querytxt ILIKE '%looker%' to identify Looker traffic.
-   If your environment uses a different tagging convention, adjust the filter.
+     -- Looker Query Context {"user_id":...,"history_slug":"<hash>",...}
+   Parts 1 and 3 filter on querytxt ILIKE '%looker%' to identify this traffic.
+   Part 3 additionally matches on the specific history_slug hash to isolate
+   queries from the 4 target dashboards.
 
    ============================================================================= */
 
@@ -114,7 +126,7 @@ FROM (
   SELECT
     'REPORT_METADATA'                                                          AS result_section,
     'Note'                                                                     AS key_value,
-    'Run Part 2 to retrieve reconstructed SQL text for the top 5 queries per tier' AS metric_value,
+    'Run Part 2 (looker_mysql_direct) to get slugs for dashboards 13/71/103/120, then Part 3 (redshift) to get their SQL' AS metric_value,
     NULL                                                                        AS col_4,
     NULL                                                                        AS col_5
 
@@ -149,49 +161,139 @@ ORDER BY
 
 
 /* =============================================================================
-   PART 2 -- QUERY DETAIL
-   Run this block separately. Highlight from WITH to the semicolon and click Run.
-   Returns the top 5 slowest queries per tier with reconstructed SQL text.
+   PART 2 -- GET HISTORY SLUGS FOR THE 4 TARGET DASHBOARDS
+   *** SWITCH CONNECTION TO: looker_mysql_direct  (schema: looker) ***
 
-   COLUMNS
-     tier               -- Tier 1/2/3 label
-     rank_in_tier       -- 1 = slowest in that tier
-     query_id           -- Redshift query ID (cross-reference with stl_wlm_query)
-     runtime_seconds    -- total execution time
-     run_date           -- Pacific date the query ran
-     run_hour           -- Pacific hour the query ran (for peak-hour context)
-     sql_text           -- first 2000 chars of reconstructed SQL
-                           (look for FROM, JOIN, WHERE to identify tables
-                           and filter patterns for DAX template design)
+   Highlight from the first ( to the final semicolon and click Run.
+   Returns the top 5 slowest history entries per dashboard over the last
+   7 days for dashboards 13, 71, 103, and 120.
+
+   OUTPUT COLUMNS
+     dashboard_id    -- one of the 4 target dashboards
+     history_slug    -- the slug embedded in Redshift context comments
+     runtime_seconds -- end-to-end Looker render time for that execution
+                        (NOTE: runtime column is in seconds in Looker history.
+                        If your instance stores it in milliseconds, divide
+                        by 1000 here and adjust the label accordingly.)
+
+   AFTER RUNNING
+   Copy each (history_slug, dashboard_id) pair from the results and paste
+   them into the target_slugs VALUES placeholder in Part 3.
+   Then switch back to redshift_pacific_time and run Part 3.
    ============================================================================= */
 
-WITH config AS (
+(
+  SELECT 13 AS dashboard_id, h.slug AS history_slug, h.runtime AS runtime_seconds
+  FROM looker.history h
+  WHERE h.real_dash_id  = 13
+    AND h.completed_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)
+    AND h.slug IS NOT NULL
+    AND h.slug        != ''
+  ORDER BY h.runtime DESC
+  LIMIT 5
+)
+UNION ALL
+(
+  SELECT 71 AS dashboard_id, h.slug AS history_slug, h.runtime AS runtime_seconds
+  FROM looker.history h
+  WHERE h.real_dash_id  = 71
+    AND h.completed_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)
+    AND h.slug IS NOT NULL
+    AND h.slug        != ''
+  ORDER BY h.runtime DESC
+  LIMIT 5
+)
+UNION ALL
+(
+  SELECT 103 AS dashboard_id, h.slug AS history_slug, h.runtime AS runtime_seconds
+  FROM looker.history h
+  WHERE h.real_dash_id  = 103
+    AND h.completed_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)
+    AND h.slug IS NOT NULL
+    AND h.slug        != ''
+  ORDER BY h.runtime DESC
+  LIMIT 5
+)
+UNION ALL
+(
+  SELECT 120 AS dashboard_id, h.slug AS history_slug, h.runtime AS runtime_seconds
+  FROM looker.history h
+  WHERE h.real_dash_id  = 120
+    AND h.completed_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)
+    AND h.slug IS NOT NULL
+    AND h.slug        != ''
+  ORDER BY h.runtime DESC
+  LIMIT 5
+)
+ORDER BY dashboard_id, runtime_seconds DESC;
+
+
+/* =============================================================================
+   PART 3 -- DASHBOARD SELECT QUERIES VIA SLUG FILTER
+   *** SWITCH CONNECTION TO: redshift_pacific_time  (schema: atomic) ***
+
+   Highlight from WITH to the semicolon and click Run.
+   Finds the actual SELECT statements those 4 dashboards fired at Redshift,
+   matched by the history_slug Looker embeds in every query context comment.
+   PDT rebuilds (INSERT INTO, CREATE) are excluded so only dashboard-driven
+   SELECT queries are returned.
+
+   BEFORE RUNNING
+   1. Run Part 2 on looker_mysql_direct to get the slug list.
+   2. Replace the placeholder rows in the target_slugs VALUES block below
+      with the actual (slug, dashboard_id) pairs from Part 2 output.
+      Format for each row:  ('the_32char_slug_hash', 13),
+
+   OUTPUT COLUMNS
+     dashboard_id    -- which of the 4 dashboards fired this query
+     history_slug    -- cross-reference with Part 2 to confirm dashboard
+     runtime_seconds -- Redshift execution time
+     run_date        -- Pacific date
+     run_hour        -- Pacific hour (compare against peak hours from Report A)
+     sql_text        -- first 2000 chars of the SELECT statement
+                        (scan FROM, JOIN, WHERE, GROUP BY for DAX template design)
+   ============================================================================= */
+
+WITH target_slugs AS (
+  /* -------------------------------------------------------------------
+     PASTE SLUGS HERE
+     Replace the two placeholder rows below with real values from Part 2.
+     One row per slug. Add or remove rows as needed.
+     Example rows:
+       ('e2efad2aa12bde310f53456cd1668a32', 13),
+       ('a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4', 71),
+       ('f9e8d7c6b5a4f9e8d7c6b5a4f9e8d7c6', 103),
+       ('1a2b3c4d5e6f1a2b3c4d5e6f1a2b3c4d', 120)
+     ------------------------------------------------------------------- */
+  SELECT slug, dashboard_id FROM (VALUES
+    ('REPLACE_ME_slug_1', 13),
+    ('REPLACE_ME_slug_2', 71)
+  ) AS t(slug, dashboard_id)
+),
+
+config AS (
   SELECT
     DATEADD(day, -7, TRUNC(GETDATE()))  AS analysis_start,
     TRUNC(GETDATE())                     AS analysis_end
 ),
 
-looker_queries AS (
+looker_select_queries AS (
   SELECT
-    q.query                                                                   AS query_id,
+    q.query                                                                    AS query_id,
     q.starttime,
-    DATEDIFF(ms, q.starttime, q.endtime) / 1000.0                            AS runtime_seconds,
-    CASE
-      WHEN DATEDIFF(ms, q.starttime, q.endtime) / 1000.0 <  10 THEN 1
-      WHEN DATEDIFF(ms, q.starttime, q.endtime) / 1000.0 <  30 THEN 2
-      ELSE                                                          3
-    END                                                                       AS tier_order,
-    CASE
-      WHEN DATEDIFF(ms, q.starttime, q.endtime) / 1000.0 <  10 THEN 'Tier 1 - Fast (<10s)'
-      WHEN DATEDIFF(ms, q.starttime, q.endtime) / 1000.0 <  30 THEN 'Tier 2 - Medium (10-30s)'
-      ELSE                                                          'Tier 3 - Heavy (>30s)'
-    END                                                                       AS tier
+    DATEDIFF(ms, q.starttime, q.endtime) / 1000.0                             AS runtime_seconds,
+    ts.dashboard_id,
+    ts.slug                                                                    AS history_slug
   FROM stl_query q
   JOIN config c ON 1 = 1
-  WHERE q.starttime >= c.analysis_start
-    AND q.starttime <  c.analysis_end
-    AND q.endtime IS NOT NULL
-    AND q.querytxt ILIKE '%looker%'
+  JOIN target_slugs ts
+    ON q.querytxt ILIKE '%"history_slug":"' || ts.slug || '"%'
+  WHERE q.starttime  >= c.analysis_start
+    AND q.starttime   < c.analysis_end
+    AND q.endtime    IS NOT NULL
+    AND q.querytxt NOT ILIKE 'INSERT INTO%'
+    AND q.querytxt NOT ILIKE 'CREATE %'
+    AND q.querytxt NOT ILIKE 'SET %'
 ),
 
 query_text AS (
@@ -199,36 +301,18 @@ query_text AS (
     t.query,
     LISTAGG(t.text, '') WITHIN GROUP (ORDER BY t.sequence)                    AS full_sql
   FROM stl_querytext t
-  WHERE t.query IN (SELECT query_id FROM looker_queries)
+  WHERE t.query IN (SELECT query_id FROM looker_select_queries)
   GROUP BY t.query
-),
-
-ranked AS (
-  SELECT
-    lq.tier,
-    lq.tier_order,
-    lq.query_id,
-    ROUND(CAST(lq.runtime_seconds AS numeric(18,2)), 2)                       AS runtime_seconds,
-    DATE(CONVERT_TIMEZONE('UTC', 'America/Vancouver', lq.starttime))          AS run_date,
-    EXTRACT(hour FROM CONVERT_TIMEZONE('UTC', 'America/Vancouver',
-            lq.starttime))                                                     AS run_hour,
-    LEFT(qt.full_sql, 2000)                                                   AS sql_text,
-    ROW_NUMBER() OVER (
-      PARTITION BY lq.tier_order
-      ORDER BY lq.runtime_seconds DESC
-    )                                                                          AS rank_in_tier
-  FROM looker_queries lq
-  LEFT JOIN query_text qt ON lq.query_id = qt.query
 )
 
 SELECT
-  tier,
-  rank_in_tier,
-  query_id,
-  runtime_seconds,
-  run_date,
-  run_hour,
-  sql_text
-FROM ranked
-WHERE rank_in_tier <= 5
-ORDER BY tier_order, rank_in_tier;
+  lsq.dashboard_id,
+  lsq.history_slug,
+  ROUND(CAST(lsq.runtime_seconds AS numeric(18,2)), 2)                       AS runtime_seconds,
+  DATE(CONVERT_TIMEZONE('UTC', 'America/Vancouver', lsq.starttime))          AS run_date,
+  EXTRACT(hour FROM CONVERT_TIMEZONE('UTC', 'America/Vancouver',
+          lsq.starttime))                                                     AS run_hour,
+  LEFT(qt.full_sql, 2000)                                                    AS sql_text
+FROM looker_select_queries lsq
+LEFT JOIN query_text qt ON lsq.query_id = qt.query
+ORDER BY lsq.dashboard_id, lsq.runtime_seconds DESC;
