@@ -194,7 +194,7 @@ ORDER BY
 (
   SELECT 13 AS dashboard_id, h.slug AS history_slug, h.runtime AS runtime_seconds
   FROM looker.history h
-  WHERE h.real_dash_id  = 13
+  WHERE h.dashboard_id  = 13
     AND h.completed_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)
     AND h.slug IS NOT NULL
     AND h.slug        != ''
@@ -205,7 +205,7 @@ UNION ALL
 (
   SELECT 71 AS dashboard_id, h.slug AS history_slug, h.runtime AS runtime_seconds
   FROM looker.history h
-  WHERE h.real_dash_id  = 71
+  WHERE h.dashboard_id  = 71
     AND h.completed_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)
     AND h.slug IS NOT NULL
     AND h.slug        != ''
@@ -216,7 +216,7 @@ UNION ALL
 (
   SELECT 103 AS dashboard_id, h.slug AS history_slug, h.runtime AS runtime_seconds
   FROM looker.history h
-  WHERE h.real_dash_id  = 103
+  WHERE h.dashboard_id  = 103
     AND h.completed_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)
     AND h.slug IS NOT NULL
     AND h.slug        != ''
@@ -227,7 +227,7 @@ UNION ALL
 (
   SELECT 120 AS dashboard_id, h.slug AS history_slug, h.runtime AS runtime_seconds
   FROM looker.history h
-  WHERE h.real_dash_id  = 120
+  WHERE h.dashboard_id  = 120
     AND h.completed_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)
     AND h.slug IS NOT NULL
     AND h.slug        != ''
