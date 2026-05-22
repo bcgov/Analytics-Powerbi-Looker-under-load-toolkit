@@ -4,7 +4,7 @@
    SCHEMA:     atomic
 
    Run each numbered block separately in SQL Runner to diagnose why
-   A_1_full_report_B_redshift_stl_queries.sql returns no data.
+   A_1_full_report_B_redshift_peak_load_stress_profile.sql returns no data.
    ============================================================================= */
 
 

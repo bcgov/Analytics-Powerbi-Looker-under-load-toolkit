@@ -1215,7 +1215,7 @@ GROUP BY rp.query_category, rp.p95_runtime, rp.max_runtime
    be factored into baseline latency expectations for the Power BI workload.
 
    *** STL tables retain ~7 days of history only ***
-   Run A_1_full_report_B_redshift_stl_queries.sql on connection
+   Run A_1_full_report_B_redshift_peak_load_stress_profile.sql on connection
    redshift_pacific_time / schema atomic promptly after a load event.
    That file is self-contained — it detects its own peak hours from the
    last 7 days of stl_query data. No input from this report is required.
@@ -1226,7 +1226,7 @@ UNION ALL
 /* --- DIMENSION 7: NOTE --- */
 SELECT
   'D7_NOTE'                                                                       AS result_section,
-  'Run A_1_full_report_B_redshift_stl_queries.sql separately'                     AS key_value,
+  'Run A_1_full_report_B_redshift_peak_load_stress_profile.sql separately'         AS key_value,
   'Connection: redshift_pacific_time  |  Schema: atomic  |  Run within 7 days of load event' AS metric_value,
   NULL                                                                             AS col_4,
   NULL                                                                             AS col_5;
@@ -1241,7 +1241,7 @@ SELECT
    and informs whether a Redshift scaling change is needed alongside the
    gateway sizing exercise.
 
-   See A_1_full_report_B_redshift_stl_queries.sql (same file, same connection).
+   See A_1_full_report_B_redshift_peak_load_stress_profile.sql (same file, same connection).
    ============================================================================= */
 
 

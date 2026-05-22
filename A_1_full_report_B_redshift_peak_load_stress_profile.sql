@@ -1,6 +1,6 @@
 /* =============================================================================
    TITLE (READ-ONLY): Looker Under-Load Stress Profile - Redshift Dimensions
-   Companion to: A_1_full_report_A_looker_history_queries.sql
+   Companion to: A_1_full_report_A_looker_peak_load_stress_profile.sql
 
    CONNECTION: redshift_pacific_time
    SCHEMA:     atomic   (stl_query and stl_wlm_query live here)
@@ -9,7 +9,7 @@
    *** STL RETENTION WARNING ***
    Redshift STL tables (stl_query, stl_wlm_query) retain approximately 7 days
    of history. This report is SELF-CONTAINED and analyses the last 7 days
-   automatically - no input from A_1_full_report_A_looker_history_queries.sql
+   automatically - no input from A_1_full_report_A_looker_peak_load_stress_profile.sql
    is required. Run this file promptly after a load event; data older than
    ~7 days is permanently lost from STL tables.
 
@@ -74,7 +74,7 @@ WITH config AS (
 
 /* =============================================================================
    PEAK HOUR DETECTION
-   Mirrors A_1_full_report_A_looker_history_queries.sql logic:
+   Mirrors A_1_full_report_A_looker_peak_load_stress_profile.sql logic:
    for each calendar day (Pacific time), the peak hour is the one with the
    highest total elapsed query time.
    ============================================================================= */
@@ -202,7 +202,7 @@ d8_cpu_summary AS (
 
 /* =============================================================================
    FINAL SINGLE RESULT SET (REPORT FORMAT)
-   5-column output to match A_1_full_report_A_looker_history_queries.sql
+   5-column output to match A_1_full_report_A_looker_peak_load_stress_profile.sql
    result_section | key_value | metric_value | col_4 | col_5
    ============================================================================= */
 
