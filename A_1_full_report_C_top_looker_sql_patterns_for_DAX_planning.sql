@@ -13,15 +13,24 @@
    Run this file within 7 days of the target load period.
 
    PURPOSE
-   Extracts and reconstructs the actual SQL that Looker fired at Redshift
-   during the past 7 days, grouped into three runtime tiers. These query
-   patterns are the templates for writing DAX measures in the Power BI
-   load-test suite.
+   Identifies the production query mix (Part 1) and extracts the actual SELECT
+   statements the 4 target dashboards fired at Redshift (Parts 2 and 3). The
+   SELECT patterns from Parts 2 and 3 are the templates for writing DAX measures
+   in the Power BI load-test suite.
 
-   The three tiers map directly to the DAX query firing schedule:
+   NOTE ON TIER 3
+   Part 1 shows a Tier 3 (>30s) bucket in the population mix. Analysis of that
+   tier (Report C run May 21, 2026) showed it is dominated entirely by PDT
+   rebuilds (INSERT INTO dev_looker.LR$...) scanning from 2023 start dates --
+   not dashboard SELECT queries. Tier 3 runtime in the population mix is
+   therefore not representative of dashboard load and is NOT used as a DAX
+   template source.
+
+   DAX LOAD TEST TIERS (based on dashboard SELECT patterns only)
      Tier 1 - Fast   (<10s)  : ~60% of firings  (volume, concurrent load)
-     Tier 2 - Medium (10-30s): ~30% of firings  (moderately complex)
-     Tier 3 - Heavy  (>30s)  : ~10% of firings  (tail queries, WLM stress)
+     Tier 2 - Medium (10-30s): ~40% of firings  (moderately complex)
+   Tier 3 WLM stress is simulated by widening the date range on a Tier 2
+   query, not by replicating PDT rebuild SQL.
 
    HOW TO USE THIS FILE
    This file has three parts. Run each block separately in SQL Runner by
