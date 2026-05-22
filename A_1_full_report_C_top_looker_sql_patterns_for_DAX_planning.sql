@@ -324,7 +324,7 @@ looker_select_queries AS (
   JOIN target_slugs ts
     ON q.querytxt ILIKE '%"history_slug":"' || ts.slug || '"%'
   WHERE q.starttime  >= c.analysis_start
-    AND q.starttime   < c.analysis_end
+    AND q.starttime  <= GETDATE()
     AND q.endtime    IS NOT NULL
     AND q.querytxt NOT ILIKE 'INSERT INTO%'
     AND q.querytxt NOT ILIKE 'CREATE %'
